@@ -7,7 +7,7 @@ try:
     import comcloak
 except ImportError as e:
     import sys
-    sys.path.append("../")
+    sys.path.append("./")
     
 from comcloak.mimo import StreamManagement
 from comcloak.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, PilotPattern, KroneckerPilotPattern, LMMSEInterpolator, tdl_freq_cov_mat, tdl_time_cov_mat
