@@ -232,7 +232,7 @@ class ChannelCoefficientsGenerator:
         else:
             rays_aoa = rays.aoa
         # Step 10
-        phi = self._step_10(rays_aoa.shape)
+        phi = self._step_10(rays_aoa.shape)#OK
         # print('phi:------',phi)
         # Step 11
         h, delays = self._step_11(phi, topology, k_factor, rays, sample_times,
@@ -860,7 +860,7 @@ class ChannelCoefficientsGenerator:
         h_full : [batch size, num_tx, num rx, num clusters, num rays, num rx antennas, num tx antennas, num time steps], torch.complex
             NLoS channel matrix
         """
-        h_phase = self._step_11_phase_matrix(phi, rays)
+        h_phase = self._step_11_phase_matrix(phi, rays)# OK
         h_field = self._step_11_field_matrix(topology, rays.aoa, rays.aod, 
                                              rays.zoa, rays.zod, h_phase)
         h_array = self._step_11_array_offsets(topology, rays.aoa, rays.aod, 
