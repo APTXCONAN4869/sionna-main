@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 from torch import log10
 from comcloak.channel.utils import deg_2_rad,wrap_angle_0_360
@@ -301,9 +302,12 @@ class RaysGenerator:
         # Generating random cluster delays
         # We don't start at 0 to avoid numerical errors
         delay_spread = torch.unsqueeze(delay_spread, dim=3)
-        x = torch.rand(size=[batch_size, num_bs, num_ut,
-            num_clusters_max],dtype=self._real_dtype)*(1.0-1e-6)+1e-6
-
+        # x = torch.rand(size=[batch_size, num_bs, num_ut,
+        #     num_clusters_max],dtype=self._real_dtype)*(1.0-1e-6)+1e-6
+        x = torch.tensor(np.random.uniform(low=1e-6, high=1.0, 
+                      size=(batch_size, num_bs, num_ut, num_clusters_max)),
+                      dtype=torch.float32)
+                      
         # Moving to linear domain
         unscaled_delays = -delay_scaling_parameter*delay_spread*torch.log(x)
         # Forcing the cluster that should not exist to huge delays (1s)
@@ -368,7 +372,11 @@ class RaysGenerator:
 
         # Generate unnormalized cluster powers
         # print(cluster_shadowing_std_db)
-        z = torch.normal(mean=0.0, std=cluster_shadowing_std_db.expand(batch_size, num_bs, num_ut,num_clusters_max))
+        # z = torch.normal(mean=0.0, std=cluster_shadowing_std_db.expand(batch_size, num_bs, num_ut,num_clusters_max))
+        z = torch.tensor(np.random.normal(loc=0.0, scale=cluster_shadowing_std_db, 
+                      size=[batch_size, num_bs, num_ut,
+                            num_clusters_max]),
+                      dtype=torch.float32)
         # Moving to linear domain
         powers_unnormalized = (torch.exp(-unscaled_delays*
             (delay_scaling_parameter - 1.0)/
@@ -459,10 +467,16 @@ class RaysGenerator:
                                                                 )/c_phi)
 
         # Introducing random variation
-        random_sign = torch.randint(low=0, high=2, size=[batch_size, num_bs, 1, num_clusters_max], dtype=torch.int32)
+        # random_sign = torch.randint(low=0, high=2, size=[batch_size, num_bs, 1, num_clusters_max], dtype=torch.int32)
+        random_sign = torch.tensor(np.random.uniform(low=0, high=2, 
+                      size=[batch_size, num_bs, 1, num_clusters_max]),
+                      dtype=torch.int32)
         random_sign = 2*random_sign - 1
         random_sign = random_sign.to(self._real_dtype)
-        random_comp = torch.normal(mean=0.0, std=(azimuth_spread/7.0).expand(batch_size, num_bs, num_ut,num_clusters_max))
+        # random_comp = torch.normal(mean=0.0, std=(azimuth_spread/7.0).expand(batch_size, num_bs, num_ut,num_clusters_max))
+        random_comp = torch.tensor(np.random.normal(loc=0.0, scale=(azimuth_spread/7.0), 
+                      size=[batch_size, num_bs, num_ut,num_clusters_max]),
+                      dtype=torch.float32)
         azimuth_angles = (random_sign*azimuth_angles_prime + random_comp
             + azimuth_angles_los)
         azimuth_angles = (azimuth_angles -
@@ -616,12 +630,18 @@ class RaysGenerator:
         zenith_angles_prime = -zenith_spread*torch.log(z)/c_theta
 
         # Random component
-        random_sign = torch.randint(low=0, high=2, size=[batch_size, num_bs, 1,
-            num_clusters_max],  dtype=torch.int32)
+        # random_sign = torch.randint(low=0, high=2, size=[batch_size, num_bs, 1,
+        #     num_clusters_max],  dtype=torch.int32)
+        random_sign = torch.tensor(np.random.uniform(low=0, high=2, 
+                      size=[batch_size, num_bs, 1, num_clusters_max]),
+                      dtype=torch.int32)
         random_sign = 2*random_sign - 1
         random_sign = random_sign.to(self._real_dtype)
-        random_comp = torch.normal(mean=0.0, std=(zenith_spread/7.0).expand(batch_size, num_bs, num_ut,
-            num_clusters_max))
+        # random_comp = torch.normal(mean=0.0, std=(zenith_spread/7.0).expand(batch_size, num_bs, num_ut,
+        #     num_clusters_max))
+        random_comp = torch.tensor(np.random.normal(loc=0.0, scale=(zenith_spread/7.0), 
+                      size=[batch_size, num_bs, num_ut,num_clusters_max]),
+                      dtype=torch.float32)
 
         # The center cluster angles depend on the UT scenario
         zenith_angles = random_sign*zenith_angles_prime + random_comp
@@ -738,6 +758,10 @@ class RaysGenerator:
         # normal distribution
         random_numbers = torch.normal(mean=0.0, std=1.0, size=(batch_size, num_bs, 1,
                 scenario.num_clusters_max, scenario.rays_per_cluster))
+        random_numbers = torch.tensor(np.random.normal( 
+                      size=[batch_size, num_bs, 1,
+                      scenario.num_clusters_max, scenario.rays_per_cluster]),
+                      dtype=torch.float32)
         shuffled_indices = torch.argsort(random_numbers)
         shuffled_indices = torch.tile(shuffled_indices, [1, 1, num_ut, 1, 1])
         # Shuffling the angles
@@ -823,7 +847,10 @@ class RaysGenerator:
         # XPR are assumed to follow a log-normal distribution.
         # Generate XPR in log-domain
         #?
-        x = torch.normal(mean=mu_xpr, std=std_xpr.expand(batch_size, num_bs, num_ut, num_clusters, num_rays_per_cluster))
+        x = np.random.normal(loc=mu_xpr, scale=std_xpr, size=[batch_size, num_bs, num_ut, num_clusters,
+            num_rays_per_cluster])
+        x = torch.tensor(x)
+        # x = torch.normal(mean=mu_xpr, std=std_xpr.expand(batch_size, num_bs, num_ut, num_clusters, num_rays_per_cluster))
         # To linear domain
         cross_polarization_power_ratios = torch.pow(torch.tensor(10.,
             dtype=self._real_dtype), x/10.0)

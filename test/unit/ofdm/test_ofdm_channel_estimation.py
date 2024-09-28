@@ -206,6 +206,9 @@ def check_linear_interpolation(self, pilot_pattern, time_avg=False, mode="eager"
         i, j = np.where(np.abs(x_rg[0, tx, 0]))
         h = h_freq[0,0,0,tx,0].numpy()
         h_hat_lin_numpy = linear_int(h, i, j, time_avg)
+
+        h_test = h_hat_lin[0,0,0,tx,0].numpy()
+        
         # print('test1:',h_hat_lin_numpy)
         # print('test2:',h_hat_lin[0, 0, 0, tx, 0].numpy())
         self.assertTrue(np.allclose(h_hat_lin_numpy, h_hat_lin[0,0,0,tx,0].numpy()))
