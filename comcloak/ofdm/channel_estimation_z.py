@@ -130,7 +130,17 @@ class BaseChannelEstimator(ABC, nn.Module):
         # Precompute indices to gather received pilot signals
         num_pilot_symbols = self._pilot_pattern.num_pilot_symbols
         mask = flatten_last_dims(self._pilot_pattern.mask)
-        pilot_ind = torch.argsort(mask, dim=-1, descending=True)
+        # print('mask:\n', mask[mask != 0])
+        # print('mask:\n', torch.nonzero(mask))
+        # np.save('pttensor.npy', mask.numpy())
+        # is_binary = torch.all((mask == 0) | (mask == 1))
+        # print('is_binary:\n', is_binary)
+        print('mask:\n', mask)
+        indices = torch.arange(mask.size(-1)).unsqueeze(0).expand_as(mask)
+        mask_with_offset = mask + indices * -1e-8
+        print('mask:\n', mask_with_offset)
+        pilot_ind = torch.argsort(mask_with_offset, dim=-1, descending=True)
+        print('pilot_ind:\n', pilot_ind)
         self._pilot_ind = pilot_ind[..., :num_pilot_symbols]
 
     @abstractmethod
@@ -162,6 +172,8 @@ class BaseChannelEstimator(ABC, nn.Module):
 
     def forward(self, inputs):
         y, no = inputs
+        # print(torch.nonzero(y))
+        # print("output:\n", y[y != 0 + 0j])
         if no is not torch.tensor:
             no = torch.tensor(no)
         
@@ -173,28 +185,36 @@ class BaseChannelEstimator(ABC, nn.Module):
         # or [batch_size, num_rx, num_rx_ant]
 
         # Removed nulled subcarriers (guards, dc)
+        #?
         y_eff = self._removed_nulled_scs(y)
-
+        # print(torch.nonzero(y_eff))
+        # print("output:\n", y_eff[y_eff != 0 + 0j])
         # Flatten the resource grid for pilot extraction
         y_eff_flat = flatten_last_dims(y_eff)
-
+        # print(torch.nonzero(y_eff_flat))
+        # print("output1:\n", y_eff_flat[y_eff_flat != 0 + 0j])
         # Gather pilots along the last dimensions
         # Resulting shape: y_eff_flat.shape[:-1] + pilot_ind.shape, i.e.:
         # [batch_size, num_rx, num_rx_ant, num_tx, num_streams,...
         #  ..., num_pilot_symbols]
         y_pilots = gather_pytorch(y_eff_flat, self._pilot_ind, axis=-1)
-
+        print('indice:\n', self._pilot_ind)
+        print(torch.nonzero(y_pilots))
+        # print("output2:\n", y_eff_flat[y_eff_flat != 0 + 0j])
         # Compute LS channel estimates
         # Note: Some might be Inf because pilots=0, but we do not care
         # as only the valid estimates will be considered during interpolation.
         # We do a save division to replace Inf by 0.
         # Broadcasting from pilots here is automatic since pilots have shape
         # [num_tx, num_streams, num_pilot_symbols]
+        #OK
         h_hat, err_var = self.estimate_at_pilot_locations(y_pilots, no)
-
+        # print("output:\n", h_hat[h_hat != 0 + 0j])
+        #OK
         # Interpolate channel estimates over the resource grid
         if self._interpolation_type is not None:
             h_hat, err_var = self._interpol(h_hat, err_var)
+            # print("output:\n", h_hat[h_hat != 0 + 0j])
             err_var = torch.maximum(err_var, torch.tensor(0, dtype=err_var.dtype))
 
         return h_hat, err_var
@@ -303,7 +323,10 @@ class LSChannelEstimator(BaseChannelEstimator, nn.Module):
         # Broadcasting from pilots here is automatic since pilots have shape
         # [num_tx, num_streams, num_pilot_symbols]
         h_ls = torch.nan_to_num(y_pilots / self._pilot_pattern.pilots, nan=0.0, posinf=0.0, neginf=0.0)
-
+        # np.save('pttensor.npy', y_pilots.numpy())
+        print("h_ls:\n", h_ls[h_ls != 0 + 0j])
+        # print("y_pilots:\n", y_pilots[y_pilots != 0 + 0j])
+        # print("pilots:\n", self._pilot_pattern.pilots[self._pilot_pattern.pilots != 0 + 0j])
         # Compute error variance and broadcast to the same shape as h_ls
         # Expand rank of no for broadcasting
 
@@ -521,21 +544,22 @@ class LinearInterpolator(BaseChannelInterpolator, nn.Module):
         self._time_avg = time_avg
 
         # Reshape mask to shape [-1,num_ofdm_symbols,num_effective_subcarriers]
-        mask = torch.tensor(pilot_pattern.mask)
+        mask = np.array(pilot_pattern.mask)
         mask_shape = mask.shape  # Store to reconstruct the original shape
-        mask = torch.reshape(mask, [-1] + list(mask_shape[-2:]))
+        mask = np.reshape(mask, [-1] + list(mask_shape[-2:]))
 
         # Reshape the pilots to shape [-1, num_pilot_symbols]
         pilots = pilot_pattern.pilots
-        pilots = torch.reshape(pilots, [-1] + [pilots.shape[-1]])
+        pilots = np.reshape(pilots, [-1] + [pilots.shape[-1]])
   
         # max_num_zero_pilots = np.max(np.sum(np.abs(pilots) == 0, axis=-1))
-        max_num_zero_pilots = torch.max(torch.sum(torch.abs(pilots) == 0, dim=-1))
+        max_num_zero_pilots = np.max(np.sum(np.abs(pilots.numpy())==0, -1))
 
         assert max_num_zero_pilots < pilots.shape[-1],\
             "Each pilot sequence must have at least one nonzero entry"
 
         # Create actual pilot patterns for each stream over the resource grid
+        mask = torch.tensor(mask)
         z = torch.zeros_like(mask, dtype=pilots.dtype)
         for a in range(z.shape[0]):
             z[a][np.where(mask[a])] = pilots[a]
@@ -576,7 +600,7 @@ class LinearInterpolator(BaseChannelInterpolator, nn.Module):
 
         y_0_freq_ind = np.copy(x_0_freq)  # Indices used to gather estimates
         y_1_freq_ind = np.copy(x_1_freq)  # Indices used to gather estimates
-
+        print("y_0_freq_ind:\n", y_0_freq_ind)
         # For each stream
         for a in range(z.shape[0]):
             pilot_count = 0  # Counts the number of non-zero pilots
@@ -687,12 +711,16 @@ class LinearInterpolator(BaseChannelInterpolator, nn.Module):
 
     def _interpolate_1d(self, inputs, x, x0, x1, y0_ind, y1_ind):
         # Gather the right values for y0 and y1
+        # np.save('pttensor.npy', inputs.numpy())
         y0 = gather_pytorch(inputs, y0_ind, axis=2, batch_dims=2)
         y1 = gather_pytorch(inputs, y1_ind, axis=2, batch_dims=2)
-
+        print("inputs:\n", torch.nonzero(inputs))
+        # print("y0:\n", y0[y0 != 0 + 0j])
+        # print("y0_ind:\n", y0_ind[y0_ind != 0])
+        # print("inputs:\n", inputs[inputs != 0 + 0j])
         # Undo the permutation of the inputs
-        y0 = y0.permute(*self._perm_bwd)
-        y1 = y1.permute(*self._perm_bwd)
+        y0 = y0.permute(self._perm_bwd.tolist())
+        y1 = y1.permute(self._perm_bwd.tolist())
 
         # Compute linear interpolation
 
@@ -705,23 +733,29 @@ class LinearInterpolator(BaseChannelInterpolator, nn.Module):
         # Pad the inputs with a leading 0.
         # All undefined channel estimates will get this value.
         # print(self._pad)
-        flattened_padding = [pad for dim in reversed(self._pad) for pad in reversed(dim)]
+        print("inputs:\n", torch.nonzero(inputs))
+        # flattened_padding = [pad for dim in reversed(self._pad) for pad in reversed(dim)]
+        flattened_padding = np.flip(self._pad, axis=0).ravel()
+        print(self._pad)
+        print(flattened_padding)
         inputs = torch.nn.functional.pad(inputs, tuple(flattened_padding), mode='constant', value=0)
-
+        print("inputs:\n", torch.nonzero(inputs))
         # Transpose inputs to bring batch_dims for gather last. New shape:
         # [num_tx, num_streams_per_tx, 1+num_pilots, k, l, m]
-        inputs = inputs.permute(*self._perm_fwd_freq)
-
+        inputs = inputs.permute(self._perm_fwd_freq.tolist())
+        print("inputs:\n", torch.nonzero(inputs))
         # Frequency-domain interpolation
         # h_hat_freq has shape:
         # [k, l, m, num_tx, num_streams_per_tx, num_ofdm_symbols,...
         #  ...num_effective_subcarriers]
+        # print("output:\n", inputs[inputs != 0 + 0j])
         h_hat_freq = self._interpolate_1d(inputs,
                                           self._x_freq,
                                           self._x_0_freq,
                                           self._x_1_freq,
                                           self._y_0_freq_ind,
                                           self._y_1_freq_ind)
+        print("h_hat_freq:\n", h_hat_freq[h_hat_freq != 0 + 0j])
         # Time-domain interpolation
         # Time-domain averaging (optional)
         if self._time_avg:
@@ -739,6 +773,7 @@ class LinearInterpolator(BaseChannelInterpolator, nn.Module):
         # h_hat_time has shape:
         # [k, l, m, num_tx, num_streams_per_tx, num_ofdm_symbols,...
         #  ...num_effective_subcarriers]
+        # print("output:\n", h_hat_time[h_hat_time != 0 + 0j])
         h_hat_time = self._interpolate_1d(h_hat_time,
                                           self._x_time,
                                           self._x_0_time,
@@ -748,8 +783,9 @@ class LinearInterpolator(BaseChannelInterpolator, nn.Module):
         return h_hat_time
 
     def forward(self, h_hat, err_var):
+        print("output:\n", h_hat[h_hat != 0 + 0j])
         h_hat = self._interpolate(h_hat)
-
+        print("output:\n", h_hat[h_hat != 0 + 0j])
         # the interpolator requires complex-valued inputs
         err_var = torch.tensor(err_var, dtype = torch.complex64)
         err_var = self._interpolate(err_var)

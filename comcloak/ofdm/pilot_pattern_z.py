@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from comcloak.ofdm import ofdm_test_module_z
+from .ofdm_test_module_z import QAMSource
 from matplotlib import colors
 
 class PilotPattern():

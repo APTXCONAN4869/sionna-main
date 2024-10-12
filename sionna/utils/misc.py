@@ -166,18 +166,18 @@ class BinarySource(Layer):
             return tf.cast(self._rng.uniform(inputs, 0, 2, tf.int32),
                            dtype=super().dtype)
         else:
-            return tf.cast(tf.random.uniform(inputs, 0, 2, tf.int32),
-                          dtype=super().dtype) 
+            # return tf.cast(tf.random.uniform(inputs, 0, 2, tf.int32),
+            #               dtype=super().dtype) 
 
-            # # 设置随机数生成器
-            # rng = np.random.default_rng(seed=12345)  # 你可以根据需要设置种子
+            # 设置随机数生成器
+            rng = np.random.default_rng(seed=12345)  # 你可以根据需要设置种子
 
-            # # 使用 randint 生成随机整数
-            # random_integers = rng.integers(low=0, high=2, size=inputs, dtype=np.int32)
+            # 使用 randint 生成随机整数
+            random_integers = rng.integers(low=0, high=2, size=inputs, dtype=np.int32)
 
-            # # 转换数据类型
-            # result = random_integers.astype(np.float32)  # self._dtype 在此示例中假设为 float32
-            # return tf.cast(result,  dtype=super().dtype)
+            # 转换数据类型
+            result = random_integers.astype(np.float32)  # self._dtype 在此示例中假设为 float32
+            return tf.cast(result,  dtype=super().dtype)
 
 
 

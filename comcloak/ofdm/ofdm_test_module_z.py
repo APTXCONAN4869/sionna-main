@@ -624,7 +624,7 @@ class Mapper(nn.Module):
         # int_rep = int_rep.view(-1)
         # print(self._constellation.points.shape)
         # x = torch.gather(self._constellation.points, 0, int_rep)
-        x = gather_pytorch(self._constellation.points, 0, int_rep)
+        x = gather_pytorch(self._constellation.points, int_rep, axis=0)
         # print(x.shape)
 
         if self._return_indices:

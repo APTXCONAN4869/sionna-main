@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 import torch
-import pytest
 import unittest
 import numpy as np
 from torch import nn
@@ -25,3 +24,11 @@ if torch.cuda.is_available():
     print('Only GPU number', gpu_num, 'used.')
 
 
+import numpy as np
+
+a = np.array([1.0, 2.0, 3.001])
+b = np.array([1.0, 2.0, 3.0])
+
+# 默认的 rtol=1e-5 和 atol=1e-8
+result = np.allclose(a, b)
+print(result)  # True，因为差值在默认的误差范围内
