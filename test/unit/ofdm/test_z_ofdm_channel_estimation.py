@@ -173,6 +173,7 @@ def check_linear_interpolation(self, pilot_pattern, time_avg=False, mode="eager"
         h_freq = cir_to_ofdm_channel(frequencies, a, tau, normalize=True)
         y = channel_freq([x_rg, h_freq])  # noiseless channel
         h_hat_lin, _n = ls_est([y, 0.0])
+        
         # print('x_rg:----------', x_rg)
         # print('h_freq:----------', h_freq)
         # print('h_hat_lin:----------', h_hat_lin)
@@ -197,7 +198,7 @@ def check_linear_interpolation(self, pilot_pattern, time_avg=False, mode="eager"
         h = h_freq[0, 0, 0, tx, 0].numpy()
         h_hat_lin_numpy = linear_int(h, i, j, time_avg)
         
-        h_test = h_hat_lin[0,0,0,tx,0].numpy()
+        h_test = h_hat_lin_numpy  - h_hat_lin[0,0,0,tx,0].numpy()
         
         # print('test1:',h_hat_lin_numpy)
         # print('test2:',h_hat_lin[0, 0, 0, tx, 0].numpy())
@@ -205,41 +206,41 @@ def check_linear_interpolation(self, pilot_pattern, time_avg=False, mode="eager"
 
 class TestLinearInterpolator(unittest.TestCase):
 
-    def test_sparse_pilot_pattern(self):
-        "One UT has two pilots, three others have just one"
-        num_ut = 4
-        num_streams_per_tx = 1
-        num_ofdm_symbols = 14
-        fft_size = 64
-        mask = np.zeros([num_ut, num_streams_per_tx, num_ofdm_symbols, fft_size], bool)
-        mask[...,[2,3,10,11],:] = True
-        num_pilots = np.sum(mask[0,0])
-        pilots = np.zeros([num_ut, num_streams_per_tx, num_pilots])
-        pilots[0,0,10] = 1
-        pilots[0,0,234] = 1
-        pilots[1,0,20] = 1
-        pilots[2,0,70] = 1
-        pilots[3,0,120] = 1
-        pilot_pattern = PilotPattern(mask, pilots)
-        check_linear_interpolation(self, pilot_pattern, mode="eager")
-        # check_linear_interpolation(self, pilot_pattern, mode="graph")
-        # check_linear_interpolation(self, pilot_pattern, mode="xla")
-
-    # def test_kronecker_pilot_patterns_01(self):
+    # def test_sparse_pilot_pattern(self):
+    #     "One UT has two pilots, three others have just one"
     #     num_ut = 4
     #     num_streams_per_tx = 1
     #     num_ofdm_symbols = 14
     #     fft_size = 64
-    #     pilot_ofdm_symbol_indices = [2, 11]
-    #     rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
-    #               fft_size=fft_size,
-    #               subcarrier_spacing=30e3,
-    #               num_tx=num_ut,
-    #               num_streams_per_tx=num_streams_per_tx,
-    #               cyclic_prefix_length=0,
-    #               pilot_pattern="kronecker",
-    #               pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
-    #     check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
+    #     mask = np.zeros([num_ut, num_streams_per_tx, num_ofdm_symbols, fft_size], bool)
+    #     mask[...,[2,3,10,11],:] = True
+    #     num_pilots = np.sum(mask[0,0])
+    #     pilots = np.zeros([num_ut, num_streams_per_tx, num_pilots])
+    #     pilots[0,0,10] = 1
+    #     pilots[0,0,234] = 1
+    #     pilots[1,0,20] = 1
+    #     pilots[2,0,70] = 1
+    #     pilots[3,0,120] = 1
+    #     pilot_pattern = PilotPattern(mask, pilots)
+    #     check_linear_interpolation(self, pilot_pattern, mode="eager")
+        # check_linear_interpolation(self, pilot_pattern, mode="graph")
+        # check_linear_interpolation(self, pilot_pattern, mode="xla")
+
+    def test_kronecker_pilot_patterns_01(self):
+        num_ut = 4
+        num_streams_per_tx = 1
+        num_ofdm_symbols = 14
+        fft_size = 64
+        pilot_ofdm_symbol_indices = [2, 11]
+        rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
+                  fft_size=fft_size,
+                  subcarrier_spacing=30e3,
+                  num_tx=num_ut,
+                  num_streams_per_tx=num_streams_per_tx,
+                  cyclic_prefix_length=0,
+                  pilot_pattern="kronecker",
+                  pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
+        check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
     #     check_linear_interpolation(self, rg.pilot_pattern, mode="graph")
     #     check_linear_interpolation(self, rg.pilot_pattern, mode="xla")
 
