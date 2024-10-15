@@ -236,7 +236,8 @@ def cir_to_ofdm_channel(frequencies, a, tau, normalize=False):
                        keepdim=True)
         c = torch.complex(torch.sqrt(c),
                           torch.zeros((),dtype=real_dtype) )
-        h_f = torch.divide(h_f, c+ 1e-10)
+        # h_f = torch.divide(h_f, c+ 1e-10)
+        h_f = torch.nan_to_num(h_f / c, nan=0.0, posinf=0.0, neginf=0.0)
 
     return h_f
     # 测试函数
@@ -478,7 +479,12 @@ def wrap_angle_0_360(angle):
         y : Tensor
             ``angle`` wrapped to (0,360)
     """
-    return torch.fmod(angle, 360.)
+    
+    # return torch.fmod(angle, 360.)
+    result = torch.fmod(angle, 360)
+    result = torch.where(result < 0, result + 360, result)
+    return result
+
 
 def sample_bernoulli(shape, p, dtype = np.int32):
     r"""

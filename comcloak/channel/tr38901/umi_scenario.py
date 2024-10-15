@@ -146,9 +146,10 @@ class UMiScenario(SystemLevelScenario):
         log_mean_zsd_los = torch.maximum(
             torch.tensor(-0.21, dtype=self._dtype.to_real()),
             -14.8*(distance_2d/1000.0) + 0.01*torch.abs(h_ut-h_bs)+0.83)
+        #ok
         log_mean_zsd_nlos = torch.maximum(
             torch.tensor(-0.5, dtype=self._dtype.to_real()),
-            -3.1*(distance_2d/1000.0) + 0.01*torch.maximum(h_ut-h_bs,torch.tensor(0.0)+0.2))
+            -3.1*(distance_2d/1000.0) + 0.01*torch.maximum(h_ut-h_bs,torch.tensor(0.0))+0.2)
         log_mean_zsd = torch.where(self.los, log_mean_zsd_los, log_mean_zsd_nlos)
 
         lsp_log_mean = torch.stack([log_mean_ds,

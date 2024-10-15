@@ -183,8 +183,10 @@ class ChannelCoefficientsGenerator:
         # Step 10
         phi = self._step_10(tf.shape(rays.aoa))
         # print('phi:------',phi)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', phi.numpy())
 
         # Step 11
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', rays.zod.numpy())
         h, delays = self._step_11(phi, topology, k_factor, rays, sample_times,
                                                                         c_ds)
 
@@ -317,6 +319,7 @@ class ChannelCoefficientsGenerator:
         """
 
         rho_hat = self._unit_sphere_vector(theta, phi)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', theta.numpy())
         rot_inv = self._reverse_rotation_matrix(orientations)
         rot_rho = tf.matmul(rot_inv, rho_hat)
         v1 = tf.constant([0,0,1], self._dtype.real_dtype)
@@ -695,12 +698,13 @@ class ChannelCoefficientsGenerator:
 
         tx_orientations = topology.tx_orientations
         rx_orientations = topology.rx_orientations
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', rx_orientations.numpy())
         # Transform departure angles to the LCS
         s = tf.shape(tx_orientations)
         shape = tf.concat([s[:2], [1,1,1,s[-1]]], 0)
         tx_orientations = tf.reshape(tx_orientations, shape)
         zod_prime, aod_prime = self._gcs_to_lcs(tx_orientations, zod, aod)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', zod.numpy())
 
         # Transform arrival angles to the LCS
         s = tf.shape(rx_orientations)
@@ -813,15 +817,19 @@ class ChannelCoefficientsGenerator:
             NLoS channel matrix
         """
         h_phase = self._step_11_phase_matrix(phi, rays)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', rays.zod.numpy())
         h_field = self._step_11_field_matrix(topology, rays.aoa, rays.aod,
                                                     rays.zoa, rays.zod, h_phase)
+        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', h_field.numpy())
         h_array = self._step_11_array_offsets(topology, rays.aoa, rays.aod,
                                                             rays.zoa, rays.zod)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', h_array.numpy())
         h_doppler = self._step_11_doppler_matrix(topology, rays.aoa, rays.zoa,
                                                                             t)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', h_doppler.numpy())
         h_full = tf.expand_dims(h_field*h_array, -1) * tf.expand_dims(
             tf.expand_dims(h_doppler, -2), -2)
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', h_full.numpy())
         power_scaling = tf.complex(tf.sqrt(rays.powers/
             tf.cast(tf.shape(h_full)[4], self._dtype.real_dtype)),
                             tf.constant(0., self._dtype.real_dtype))
@@ -942,7 +950,7 @@ class ChannelCoefficientsGenerator:
         aod = topology.los_aod
         zoa = topology.los_zoa
         zod = topology.los_zod
-
+        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', zod.numpy())
          # LoS departure and arrival angles
         aoa = tf.expand_dims(tf.expand_dims(aoa, axis=3), axis=4)
         zoa = tf.expand_dims(tf.expand_dims(zoa, axis=3), axis=4)
@@ -1006,6 +1014,7 @@ class ChannelCoefficientsGenerator:
         """
 
         h_full = self._step_11_nlos(phi, topology, rays, t)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', h_full.numpy())
         # print('h_full:---------',h_full)
         h_nlos, delays_nlos = self._step_11_reduce_nlos(h_full, rays, c_ds)
         # print('h_nlos:---------',h_nlos)

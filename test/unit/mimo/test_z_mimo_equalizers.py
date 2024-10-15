@@ -1,14 +1,14 @@
-import sys
-sys.path.insert(0, 'D:\sionna-main')
-import torch
+import os
+print("Current directory:", os.getcwd())
 try:
     import comcloak
 except ImportError as e:
     import sys
-    sys.path.append("../")
+    sys.path.append("./")
 # import pytest
 import unittest
 import numpy as np
+import torch
 # GPU configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print('Number of GPUs available :', torch.cuda.device_count())

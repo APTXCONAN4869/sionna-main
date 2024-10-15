@@ -8,7 +8,7 @@ Class for sampling large scale parameters (LSPs) and pathloss following the
 
 
 import torch
-
+import numpy as np
 
 from comcloak.utils.tensors import matrix_sqrt
 
@@ -135,9 +135,13 @@ class LSPGenerator:
         # distribution), where they are correlated as indicated in TR38901
         # specification (Section 7.5, step 4)
 
-        s = torch.normal(mean=0.0, std=1.0,size=(self._scenario.batch_size,
-            self._scenario.num_bs, self._scenario.num_ut, 7),
-            dtype=self._real_dtype)
+        s = torch.tensor(np.random.normal(loc=0.0, scale=1.0, 
+                      size=[self._scenario.batch_size,
+                      self._scenario.num_bs, self._scenario.num_ut, 7]),
+                      dtype=self._real_dtype)
+        # s = torch.normal(mean=0.0, std=1.0,size=(self._scenario.batch_size,
+        #     self._scenario.num_bs, self._scenario.num_ut, 7),
+        #     dtype=self._real_dtype)
 
         ## Applyting cross-LSP correlation
         s = torch.unsqueeze(s, dim=4)
@@ -152,7 +156,7 @@ class LSPGenerator:
         s = s.squeeze(3).permute(0, 1, 3, 2) 
 
         ## Scaling and transposing LSPs to the right mean and variance
-        lsp_log_mean = self._scenario.lsp_log_mean
+        lsp_log_mean = self._scenario.lsp_log_mean#OK
         lsp_log_std = self._scenario.lsp_log_std
         lsp_log = lsp_log_std*s + lsp_log_mean
 
@@ -480,7 +484,10 @@ class LSPGenerator:
 
         # Random path loss component
         # Gaussian distributed with standard deviation 4.4 in dB
-        pl_rnd = torch.normal(mean=0.0 ,std=4.4, size=[batch_size, num_bs, num_ut], dtype= self._real_dtype)
+        pl_rnd = torch.tensor(np.random.normal(loc=0.0, scale=4.4, 
+                      size=[batch_size, num_bs, num_ut]),
+                      dtype=self._real_dtype)
+        # pl_rnd = torch.normal(mean=0.0 ,std=4.4, size=[batch_size, num_bs, num_ut], dtype= self._real_dtype)
         pl_rnd = pl_rnd*indoor_mask
 
         return pl_tw + pl_in + pl_rnd
@@ -534,8 +541,11 @@ class LSPGenerator:
         # Random path loss component
         # Gaussian distributed with standard deviation 6.5 in dB for the
         # high loss model
-        pl_rnd = torch.normal(mean=0.0, stddev=6.5,size=[batch_size, num_bs, num_ut],
-                                  dtype=self._real_dtype)
+        pl_rnd = torch.tensor(np.random.normal(loc=0.0, scale=6.5, 
+                      size=[batch_size, num_bs, num_ut]),
+                      dtype=self._real_dtype)
+        # pl_rnd = torch.normal(mean=0.0, stddev=6.5,size=[batch_size, num_bs, num_ut],
+        #                           dtype=self._real_dtype)
         pl_rnd = pl_rnd*indoor_mask
 
         return pl_tw + pl_in + pl_rnd

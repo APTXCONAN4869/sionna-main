@@ -135,12 +135,31 @@ class BaseChannelEstimator(ABC, nn.Module):
         # np.save('pttensor.npy', mask.numpy())
         # is_binary = torch.all((mask == 0) | (mask == 1))
         # print('is_binary:\n', is_binary)
-        print('mask:\n', mask)
-        indices = torch.arange(mask.size(-1)).unsqueeze(0).expand_as(mask)
-        mask_with_offset = mask + indices * -1e-8
-        print('mask:\n', mask_with_offset)
-        pilot_ind = torch.argsort(mask_with_offset, dim=-1, descending=True)
-        print('pilot_ind:\n', pilot_ind)
+        # print('mask:\n', mask)
+        # indices = torch.arange(mask.size(-1)).unsqueeze(0).expand_as(mask)
+        # mask_with_offset = mask + indices * -1e-8
+        # print('mask:\n', mask_with_offset)
+        # pilot_ind = torch.argsort(mask, dim=-1, descending=True)
+
+        indices = torch.arange(mask.shape[-1])
+
+        flattened_tensor = mask.view(-1, mask.shape[-1])
+        pilot_ind = torch.stack([
+            torch.tensor(sorted(range(flattened_tensor.shape[-1]), key=lambda x: (-flattened_tensor[i, x], x)))
+            for i in range(flattened_tensor.shape[0])
+        ]).reshape(mask.shape)
+
+        # # Custom stable sort: For each "batch" in the first two dimensions
+        # # Sort by value in descending order and by index for stability
+        # pilot_ind = torch.stack([
+        #     torch.tensor(sorted(range(mask.shape[-1]), key=lambda x: (-mask[i, j, x], x)))
+        #     for i in range(mask.shape[0])
+        #     for j in range(mask.shape[1])
+        # ]).reshape(mask.shape)
+
+        print('pilot_ind:\n', pilot_ind[0])
+        print('mask:\n', mask[0])
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', pilot_ind.numpy())
         self._pilot_ind = pilot_ind[..., :num_pilot_symbols]
 
     @abstractmethod
@@ -187,6 +206,7 @@ class BaseChannelEstimator(ABC, nn.Module):
         # Removed nulled subcarriers (guards, dc)
         #?
         y_eff = self._removed_nulled_scs(y)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', y_eff.numpy())
         # print(torch.nonzero(y_eff))
         # print("output:\n", y_eff[y_eff != 0 + 0j])
         # Flatten the resource grid for pilot extraction
@@ -198,8 +218,9 @@ class BaseChannelEstimator(ABC, nn.Module):
         # [batch_size, num_rx, num_rx_ant, num_tx, num_streams,...
         #  ..., num_pilot_symbols]
         y_pilots = gather_pytorch(y_eff_flat, self._pilot_ind, axis=-1)
-        print('indice:\n', self._pilot_ind)
-        print(torch.nonzero(y_pilots))
+        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', self._pilot_ind.numpy())
+        # print('indice:\n', self._pilot_ind)
+        # print(torch.nonzero(y_pilots))
         # print("output2:\n", y_eff_flat[y_eff_flat != 0 + 0j])
         # Compute LS channel estimates
         # Note: Some might be Inf because pilots=0, but we do not care
@@ -324,7 +345,7 @@ class LSChannelEstimator(BaseChannelEstimator, nn.Module):
         # [num_tx, num_streams, num_pilot_symbols]
         h_ls = torch.nan_to_num(y_pilots / self._pilot_pattern.pilots, nan=0.0, posinf=0.0, neginf=0.0)
         # np.save('pttensor.npy', y_pilots.numpy())
-        print("h_ls:\n", h_ls[h_ls != 0 + 0j])
+        # print("h_ls:\n", h_ls[h_ls != 0 + 0j])
         # print("y_pilots:\n", y_pilots[y_pilots != 0 + 0j])
         # print("pilots:\n", self._pilot_pattern.pilots[self._pilot_pattern.pilots != 0 + 0j])
         # Compute error variance and broadcast to the same shape as h_ls

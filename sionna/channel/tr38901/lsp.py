@@ -9,6 +9,7 @@ Class for sampling large scale parameters (LSPs) and pathloss following the
 
 
 import tensorflow as tf
+import numpy as np
 
 from sionna.utils import log10
 from sionna.utils import matrix_sqrt
@@ -118,10 +119,13 @@ class LSPGenerator:
         # They are generated in the log-domain (where they follow a normal
         # distribution), where they are correlated as indicated in TR38901
         # specification (Section 7.5, step 4)
-
-        s = tf.random.normal(shape=[self._scenario.batch_size,
-            self._scenario.num_bs, self._scenario.num_ut, 7],
-            dtype=self._scenario.dtype.real_dtype)
+        s = tf.convert_to_tensor(np.random.normal(loc=0.0, scale=1.0, 
+                      size=[self._scenario.batch_size,
+                      self._scenario.num_bs, self._scenario.num_ut, 7]),
+                      dtype=self._scenario.dtype.real_dtype)
+        # s = tf.random.normal(shape=[self._scenario.batch_size,
+        #     self._scenario.num_bs, self._scenario.num_ut, 7],
+        #     dtype=self._scenario.dtype.real_dtype)
 
         ## Applyting cross-LSP correlation
         s = tf.expand_dims(s, axis=4)
@@ -441,8 +445,11 @@ class LSPGenerator:
 
         # Random path loss component
         # Gaussian distributed with standard deviation 4.4 in dB
-        pl_rnd = tf.random.normal(shape=[batch_size, num_bs, num_ut],
-            mean=0.0, stddev=4.4, dtype=self._scenario.dtype.real_dtype)
+        pl_rnd = tf.convert_to_tensor(np.random.normal(loc=0.0, scale=4.4, 
+                      size=[batch_size, num_bs, num_ut]),
+                      dtype=self._scenario.dtype.real_dtype)
+        # pl_rnd = tf.random.normal(shape=[batch_size, num_bs, num_ut],
+        #     mean=0.0, stddev=4.4, dtype=self._scenario.dtype.real_dtype)
         pl_rnd = pl_rnd*indoor_mask
 
         return pl_tw + pl_in + pl_rnd
@@ -495,9 +502,12 @@ class LSPGenerator:
         # Random path loss component
         # Gaussian distributed with standard deviation 6.5 in dB for the
         # high loss model
-        pl_rnd = tf.random.normal(shape=[batch_size, num_bs, num_ut],
-                                  mean=0.0, stddev=6.5,
-                                  dtype=self._scenario.dtype.real_dtype)
+        pl_rnd = tf.convert_to_tensor(np.random.normal(loc=0.0, scale=6.5, 
+                      size=[batch_size, num_bs, num_ut]),
+                      dtype=self._scenario.dtype.real_dtype)
+        # pl_rnd = tf.random.normal(shape=[batch_size, num_bs, num_ut],
+        #                           mean=0.0, stddev=6.5,
+        #                           dtype=self._scenario.dtype.real_dtype)
         pl_rnd = pl_rnd*indoor_mask
 
         return pl_tw + pl_in + pl_rnd

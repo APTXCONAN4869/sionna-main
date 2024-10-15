@@ -166,6 +166,7 @@ class SystemLevelChannel(ChannelModel):
             lsp = self._lsp
 
         # Sample rays
+        #rays zods OK
         rays = self._ray_sampler(lsp)
 
         # Sample channel responses
@@ -179,6 +180,7 @@ class SystemLevelChannel(ChannelModel):
             moving_end = 'tx'
             tx_orientations = self._scenario.ut_orientations
             rx_orientations = self._scenario.bs_orientations
+        #los_zod?    
         topology = Topology(    velocities=self._scenario.ut_velocities,
                                 moving_end=moving_end,
                                 los_aoa=deg_2_rad(self._scenario.los_aoa),
@@ -198,13 +200,16 @@ class SystemLevelChannel(ChannelModel):
         # Default is downlink, so we need to do some tranpose to switch tx and
         # rx and to switch angle of arrivals and departure if direction is set
         # to uplink. Nothing needs to be done if direction is downlink
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', rays.zod.numpy())
         if self._scenario.direction == "uplink":
             aoa = rays.aoa
             zoa = rays.zoa
             aod = rays.aod
             zod = rays.zod
+            # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', zoa.numpy())
             rays.aod = aoa.permute(0, 2, 1, 3, 4)
             rays.zod = zoa.permute(0, 2, 1, 3, 4)
+            # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', rays.zod.numpy())
             rays.aoa = aod.permute(0, 2, 1, 3, 4)
             rays.zoa = zod.permute(0, 2, 1, 3, 4)
             rays.powers = rays.powers.permute(0, 2, 1, 3)
@@ -232,16 +237,19 @@ class SystemLevelChannel(ChannelModel):
         # pylint: disable=unbalanced-tuple-unpacking
         # print('input:------------------',num_time_samples, sampling_frequency,
         #                               k_factor, rays, topology, c_ds)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', rays.zod.numpy())
         h, delays = self._cir_sampler(num_time_samples, sampling_frequency,
                                       k_factor, rays, topology, c_ds)
 
         # Step 12
-        h = self._step_12(h, sf)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', h.numpy())
+        h = self._step_12(h, sf)#[0.01]?
 
         # Reshaping to match the expected output
-        h = h.permute(0, 2, 4, 1, 5, 3, 6)
+        h = h.permute(0, 2, 4, 1, 5, 3, 6)#[0.01]?
         delays = delays.permute(0, 2, 1, 3)
         # print('h:------',h)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', h.numpy())
 
         # Stop gadients to avoid useless backpropagation
         with torch.no_grad():

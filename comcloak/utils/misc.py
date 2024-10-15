@@ -226,10 +226,16 @@ def complex_normal(shape, var=1.0, dtype=torch.complex64):
     # Half the variance for each dimension
     var_dim = var / 2
     stddev = torch.sqrt(torch.tensor(var_dim, dtype=get_real_dtype(dtype)))
-
+ 
     # Generate complex Gaussian noise with the right variance
-    xr = torch.normal(mean=0, std=stddev, size=shape, dtype=get_real_dtype(dtype))
-    xi = torch.normal(mean=0, std=stddev, size=shape, dtype=get_real_dtype(dtype))
+    xr = torch.tensor(np.random.normal(loc=0.0, scale=stddev, 
+                      size=shape),
+                      dtype=get_real_dtype(dtype))
+    xi = torch.tensor(np.random.normal(loc=0.0, scale=stddev, 
+                      size=shape),
+                      dtype=get_real_dtype(dtype))
+    # xr = torch.normal(mean=0, std=stddev, size=shape, dtype=get_real_dtype(dtype))
+    # xi = torch.normal(mean=0, std=stddev, size=shape, dtype=get_real_dtype(dtype))
     x = torch.complex(xr, xi)
 
     return x

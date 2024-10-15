@@ -120,9 +120,12 @@ class BaseChannelEstimator(ABC, Layer):
         # np.save('tftensor.npy', mask.numpy())
         # is_binary = tf.reduce_all((mask == 0) | (mask == 1))
         # print('is_binary:\n', is_binary)
-        print('mask:\n', mask)
+        # print('mask:\n', mask)
         pilot_ind = tf.argsort(mask, axis=-1, direction="DESCENDING")
-        print('pilot_ind:\n', pilot_ind)
+        print('pilot_ind:\n', pilot_ind[0])
+        # print('mask:\n', mask[0])
+        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', pilot_ind.numpy())
+        
         self._pilot_ind = pilot_ind[...,:num_pilot_symbols]
 
     @abstractmethod
@@ -165,6 +168,7 @@ class BaseChannelEstimator(ABC, Layer):
 
         # Removed nulled subcarriers (guards, dc)
         y_eff = self._removed_nulled_scs(y)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', y_eff.numpy())
         # print(tf.where(y_eff != 0 + 0j))
 
         # Flatten the resource grid for pilot extraction
@@ -177,8 +181,9 @@ class BaseChannelEstimator(ABC, Layer):
         # [batch_size, num_rx, num_rx_ant, num_tx, num_streams,...
         #  ..., num_pilot_symbols]
         y_pilots = tf.gather(y_eff_flat, self._pilot_ind, axis=-1)
-        print('indice:\n', self._pilot_ind)
-        print(tf.where(y_pilots != 0 + 0j))
+        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', self._pilot_ind.numpy())
+        # print('indice:\n', self._pilot_ind)
+        # print(tf.where(y_pilots != 0 + 0j))
         # Compute LS channel estimates
         # Note: Some might be Inf because pilots=0, but we do not care
         # as only the valid estimates will be considered during interpolation.

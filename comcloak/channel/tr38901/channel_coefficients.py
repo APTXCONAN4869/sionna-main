@@ -234,7 +234,9 @@ class ChannelCoefficientsGenerator:
         # Step 10
         phi = self._step_10(rays_aoa.shape)#OK
         # print('phi:------',phi)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', phi.numpy())
         # Step 11
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', rays.zod.numpy())
         h, delays = self._step_11(phi, topology, k_factor, rays, sample_times,
                                                                         c_ds)
 
@@ -367,6 +369,7 @@ class ChannelCoefficientsGenerator:
         """
 
         rho_hat = self._unit_sphere_vector(theta, phi)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', theta.numpy())
         rot_inv = self._reverse_rotation_matrix(orientations)
         rot_rho = torch.matmul(rot_inv, rho_hat)
         v1 = torch.tensor([0,0,1], dtype=self._real_dtype)
@@ -745,13 +748,14 @@ class ChannelCoefficientsGenerator:
 
         tx_orientations = topology.tx_orientations
         rx_orientations = topology.rx_orientations
-
+        #inputs is ok
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', rx_orientations.numpy())
         # Transform departure angles to the LCS
         s = tx_orientations.shape
         shape = torch.cat([torch.tensor(s[:2]), torch.tensor([1,1,1,s[-1]])], 0).tolist()
         tx_orientations = torch.reshape(tx_orientations, tuple(shape))
         zod_prime, aod_prime = self._gcs_to_lcs(tx_orientations, zod, aod)
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', zod.numpy())
         # Transform arrival angles to the LCS
         s = rx_orientations.shape
         shape = torch.cat([torch.tensor([s[0],1]),torch.tensor([s[1],1,1,s[-1]])], 0).tolist()
@@ -861,15 +865,21 @@ class ChannelCoefficientsGenerator:
             NLoS channel matrix
         """
         h_phase = self._step_11_phase_matrix(phi, rays)# OK
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', rays.zod.numpy())
+        #[1e-5, 1e-4]?
         h_field = self._step_11_field_matrix(topology, rays.aoa, rays.aod, 
                                              rays.zoa, rays.zod, h_phase)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', h_field.numpy())
+        #OK
         h_array = self._step_11_array_offsets(topology, rays.aoa, rays.aod, 
                                               rays.zoa, rays.zod)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', h_array.numpy())
         h_doppler = self._step_11_doppler_matrix(topology, rays.aoa, 
                                                  rays.zoa, t)
-        
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', h_doppler.numpy())
+        #error[1]?
         h_full = (h_field * h_array).unsqueeze(-1) * h_doppler.unsqueeze(-2).unsqueeze(-2)
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', h_full.numpy())        
         real = torch.sqrt(rays.powers / h_full.size(4)).to(self._real_dtype)
         img = torch.tensor(0.,dtype=self._real_dtype)
         power_scaling = torch.complex(real,img)
@@ -989,7 +999,7 @@ class ChannelCoefficientsGenerator:
         aod = topology.los_aod
         zoa = topology.los_zoa
         zod = topology.los_zod
-
+        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', zod.numpy())
          # LoS departure and arrival angles
         aoa = torch.unsqueeze(torch.unsqueeze(aoa, dim=3), dim=4)
         zoa = torch.unsqueeze(torch.unsqueeze(zoa, dim=3), dim=4)
@@ -1051,9 +1061,10 @@ class ChannelCoefficientsGenerator:
         c_ds : [batch size, num TX, num RX], torch.float
             Cluster delay spread
         """
-        # ?rays
+        
         h_full = self._step_11_nlos(phi, topology, rays, t)
-        # print('h_full:---------',h_full)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', h_full.numpy())
+        # print('h_full:---------',h_full)[0.005]?
         h_nlos, delays_nlos = self._step_11_reduce_nlos(h_full, rays, c_ds)
         # print('h_nlos:---------',h_nlos)
         ####  LoS scenario

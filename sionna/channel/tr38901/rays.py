@@ -130,18 +130,19 @@ class RaysGenerator:
         # Sample ZoD
         zod = self._zenith_angles_of_departure(lsp.zsd, lsp.k_factor,
                                                 powers_for_angles_gen)
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', zod.numpy())
         # XPRs
         xpr = self._cross_polarization_power_ratios()
 
         # Random coupling
         aoa, aod, zoa, zod = self._random_coupling(aoa, aod, zoa, zod)
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', zoa.numpy())
         # Convert angles of arrival and departure from degree to radian
         aoa = deg_2_rad(aoa)
         aod = deg_2_rad(aod)
         zoa = deg_2_rad(zoa)
         zod = deg_2_rad(zod)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', zod.numpy())
 
         # Storing and returning rays
         rays = Rays(delays = delays,
@@ -151,7 +152,7 @@ class RaysGenerator:
                     zoa    = zoa,
                     zod    = zod,
                     xpr    = xpr)
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', rays.zod.numpy())
         return rays
 
     def topology_updated_callback(self):
@@ -658,11 +659,13 @@ class RaysGenerator:
         zenith_angles = tf.expand_dims(zenith_angles, axis=4)
         cluster_angle_spread = tf.expand_dims(cluster_angle_spread, axis=4)
         zenith_angles = zenith_angles + cluster_angle_spread*ray_offsets
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', zenith_angles.numpy())
         # Wrapping to (0, 180)
         zenith_angles = wrap_angle_0_360(zenith_angles)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', zenith_angles.numpy())
         zenith_angles = tf.where(tf.math.greater(zenith_angles, 180.),
             360.-zenith_angles, zenith_angles)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', zenith_angles.numpy())
 
         return zenith_angles
 
@@ -743,8 +746,8 @@ class RaysGenerator:
 
         # Create randomly shuffled indices by arg-sorting samples from a random
         # normal distribution
-        random_numbers = tf.random.normal([batch_size, num_bs, 1,
-                scenario.num_clusters_max, scenario.rays_per_cluster])
+        # random_numbers = tf.random.normal([batch_size, num_bs, 1,
+        #         scenario.num_clusters_max, scenario.rays_per_cluster])
         random_numbers = tf.convert_to_tensor(np.random.normal( 
                       size=[batch_size, num_bs, 1,
                       scenario.num_clusters_max, scenario.rays_per_cluster]),
