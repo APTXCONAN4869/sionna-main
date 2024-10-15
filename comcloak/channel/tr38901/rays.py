@@ -156,19 +156,19 @@ class RaysGenerator:
         # Sample ZoD
         zod = self._zenith_angles_of_departure(lsp.zsd, lsp.k_factor,
                                                 powers_for_angles_gen)
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', zod.numpy())
         # XPRs
         xpr = self._cross_polarization_power_ratios()
 
         # Random coupling
         aoa, aod, zoa, zod = self._random_coupling(aoa, aod, zoa, zod)
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', zoa.numpy())
         # Convert angles of arrival and departure from degree to radian
         aoa = deg_2_rad(aoa)
         aod = deg_2_rad(aod)
         zoa = deg_2_rad(zoa)
         zod = deg_2_rad(zod)
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', zod.numpy())
         # Storing and returning rays
         rays = Rays(delays = delays,
                     powers = powers,
@@ -177,7 +177,7 @@ class RaysGenerator:
                     zoa    = zoa,
                     zod    = zod,
                     xpr    = xpr)
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', rays.zod.numpy())
         return rays
 
 
@@ -640,7 +640,7 @@ class RaysGenerator:
         # random_comp = torch.normal(mean=0.0, std=(zenith_spread/7.0).expand(batch_size, num_bs, num_ut,
         #     num_clusters_max))
         random_comp = torch.tensor(np.random.normal(loc=0.0, scale=(zenith_spread/7.0), 
-                      size=[batch_size, num_bs, num_ut,num_clusters_max]),
+                      size=[batch_size, num_bs, num_ut, num_clusters_max]),
                       dtype=torch.float32)
 
         # The center cluster angles depend on the UT scenario
@@ -671,11 +671,13 @@ class RaysGenerator:
         zenith_angles = torch.unsqueeze(zenith_angles, dim=4)
         cluster_angle_spread = torch.unsqueeze(cluster_angle_spread, dim=4)
         zenith_angles = zenith_angles + cluster_angle_spread*ray_offsets
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', zenith_angles.numpy())
         # Wrapping to (0, 180)
         zenith_angles = wrap_angle_0_360(zenith_angles)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', zenith_angles.numpy())
         zenith_angles = torch.where(torch.gt(zenith_angles, 180.),
             360.-zenith_angles, zenith_angles)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', zenith_angles.numpy())
 
         return zenith_angles
     
@@ -756,8 +758,8 @@ class RaysGenerator:
 
         # Create randomly shuffled indices by arg-sorting samples from a random
         # normal distribution
-        random_numbers = torch.normal(mean=0.0, std=1.0, size=(batch_size, num_bs, 1,
-                scenario.num_clusters_max, scenario.rays_per_cluster))
+        # random_numbers = torch.normal(mean=0.0, std=1.0, size=(batch_size, num_bs, 1,
+        #         scenario.num_clusters_max, scenario.rays_per_cluster))
         random_numbers = torch.tensor(np.random.normal( 
                       size=[batch_size, num_bs, 1,
                       scenario.num_clusters_max, scenario.rays_per_cluster]),

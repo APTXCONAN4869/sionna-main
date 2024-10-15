@@ -147,6 +147,7 @@ def check_linear_interpolation(self, pilot_pattern, time_avg=False, mode="eager"
                         enable_shadow_fading=False)
 
     topology = gen_topology(batch_size, num_ut, scenario, min_ut_velocity=0, max_ut_velocity=30)
+    # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', np.array(topology[4]))
     # print('topology:',topology)
     channel_model.set_topology(*topology)
 
@@ -163,6 +164,7 @@ def check_linear_interpolation(self, pilot_pattern, time_avg=False, mode="eager"
                   pilot_pattern=pilot_pattern)
 
     frequencies = subcarrier_frequencies(rg.fft_size, rg.subcarrier_spacing)
+    # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', frequencies.numpy())
     # print('frequencies: -------------',frequencies)
     channel_freq = ApplyOFDMChannel(add_awgn=False)
     rg_mapper = ResourceGridMapper(rg)
@@ -175,12 +177,15 @@ def check_linear_interpolation(self, pilot_pattern, time_avg=False, mode="eager"
         x = tf.zeros([batch_size, num_ut, rg.num_streams_per_tx, rg.num_data_symbols], tf.complex64)
         x_rg = rg_mapper(x)
         a, tau = channel_model(num_time_samples=rg.num_ofdm_symbols, sampling_frequency=1/rg.ofdm_symbol_duration)
+        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', a.numpy())
         # print('a:---------',a)
         # print('tau:---------',tau)
         h_freq = cir_to_ofdm_channel(frequencies, a, tau, normalize=True)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', h_freq.numpy())
         y = channel_freq([x_rg, h_freq]) # noiseless channel
-        
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', y.numpy())
         h_hat_lin, _n = ls_est([y, 0.])
+        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', h_hat_lin.numpy())
         # print('x_rg:----------', x_rg)
         # print('h_freq:----------', h_freq)
         # print('h_hat_lin:----------', h_hat_lin)
@@ -216,23 +221,23 @@ def check_linear_interpolation(self, pilot_pattern, time_avg=False, mode="eager"
 
 class TestLinearInterpolator(unittest.TestCase):
 
-    # def test_sparse_pilot_pattern(self):
-    #     "One UT has two pilots, three others have just one"
-    #     num_ut = 4
-    #     num_streams_per_tx = 1
-    #     num_ofdm_symbols = 14
-    #     fft_size = 64
-    #     mask = np.zeros([num_ut, num_streams_per_tx, num_ofdm_symbols, fft_size], bool)
-    #     mask[...,[2,3,10,11],:] = True
-    #     num_pilots = np.sum(mask[0,0])
-    #     pilots = np.zeros([num_ut, num_streams_per_tx, num_pilots])
-    #     pilots[0,0,10] = 1
-    #     pilots[0,0,234] = 1
-    #     pilots[1,0,20] = 1
-    #     pilots[2,0,70] = 1
-    #     pilots[3,0,120] = 1
-    #     pilot_pattern = PilotPattern(mask, pilots)
-    #     check_linear_interpolation(self, pilot_pattern, mode="eager")
+    def test_sparse_pilot_pattern(self):
+        "One UT has two pilots, three others have just one"
+        num_ut = 4
+        num_streams_per_tx = 1
+        num_ofdm_symbols = 14
+        fft_size = 64
+        mask = np.zeros([num_ut, num_streams_per_tx, num_ofdm_symbols, fft_size], bool)
+        mask[...,[2,3,10,11],:] = True
+        num_pilots = np.sum(mask[0,0])
+        pilots = np.zeros([num_ut, num_streams_per_tx, num_pilots])
+        pilots[0,0,10] = 1
+        pilots[0,0,234] = 1
+        pilots[1,0,20] = 1
+        pilots[2,0,70] = 1
+        pilots[3,0,120] = 1
+        pilot_pattern = PilotPattern(mask, pilots)
+        check_linear_interpolation(self, pilot_pattern, mode="eager")
         # check_linear_interpolation(self, pilot_pattern, mode="graph")
         # check_linear_interpolation(self, pilot_pattern, mode="xla")
 
@@ -254,115 +259,115 @@ class TestLinearInterpolator(unittest.TestCase):
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="graph")
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="xla")
 
-#     def test_kronecker_pilot_patterns_02(self):
-#         "Only a single pilot symbol"
-#         num_ut = 4
-#         num_streams_per_tx = 1
-#         num_ofdm_symbols = 14
-#         fft_size = 64
-#         pilot_ofdm_symbol_indices = [2]
-#         rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
-#                   fft_size=fft_size,
-#                   subcarrier_spacing=30e3,
-#                   num_tx=num_ut,
-#                   num_streams_per_tx=num_streams_per_tx,
-#                   cyclic_prefix_length=0,
-#                   pilot_pattern="kronecker",
-#                   pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
-#         check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
+    def test_kronecker_pilot_patterns_02(self):
+        "Only a single pilot symbol"
+        num_ut = 4
+        num_streams_per_tx = 1
+        num_ofdm_symbols = 14
+        fft_size = 64
+        pilot_ofdm_symbol_indices = [2]
+        rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
+                  fft_size=fft_size,
+                  subcarrier_spacing=30e3,
+                  num_tx=num_ut,
+                  num_streams_per_tx=num_streams_per_tx,
+                  cyclic_prefix_length=0,
+                  pilot_pattern="kronecker",
+                  pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
+        check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="graph")
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="xla")
 
-#     def test_kronecker_pilot_patterns_03(self):
-#         "Only one pilot per UT"
-#         num_ut = 16
-#         num_streams_per_tx = 1
-#         num_ofdm_symbols = 14
-#         fft_size = 16
-#         pilot_ofdm_symbol_indices = [2]
-#         rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
-#                   fft_size=fft_size,
-#                   subcarrier_spacing=30e3,
-#                   num_tx=num_ut,
-#                   num_streams_per_tx=num_streams_per_tx,
-#                   cyclic_prefix_length=0,
-#                   pilot_pattern="kronecker",
-#                   pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
-#         check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
+    def test_kronecker_pilot_patterns_03(self):
+        "Only one pilot per UT"
+        num_ut = 16
+        num_streams_per_tx = 1
+        num_ofdm_symbols = 14
+        fft_size = 16
+        pilot_ofdm_symbol_indices = [2]
+        rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
+                  fft_size=fft_size,
+                  subcarrier_spacing=30e3,
+                  num_tx=num_ut,
+                  num_streams_per_tx=num_streams_per_tx,
+                  cyclic_prefix_length=0,
+                  pilot_pattern="kronecker",
+                  pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
+        check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="graph")
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="xla")
 
-#     def test_kronecker_pilot_patterns_04(self):
-#         "Multi UT, multi stream"
-#         num_ut = 4
-#         num_streams_per_tx = 2
-#         num_ofdm_symbols = 14
-#         fft_size = 64
-#         pilot_ofdm_symbol_indices = [2, 5, 8]
-#         rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
-#                   fft_size=fft_size,
-#                   subcarrier_spacing=30e3,
-#                   num_tx=num_ut,
-#                   num_streams_per_tx=num_streams_per_tx,
-#                   cyclic_prefix_length=0,
-#                   pilot_pattern="kronecker",
-#                   pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
-#         check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
+    def test_kronecker_pilot_patterns_04(self):
+        "Multi UT, multi stream"
+        num_ut = 4
+        num_streams_per_tx = 2
+        num_ofdm_symbols = 14
+        fft_size = 64
+        pilot_ofdm_symbol_indices = [2, 5, 8]
+        rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
+                  fft_size=fft_size,
+                  subcarrier_spacing=30e3,
+                  num_tx=num_ut,
+                  num_streams_per_tx=num_streams_per_tx,
+                  cyclic_prefix_length=0,
+                  pilot_pattern="kronecker",
+                  pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
+        check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="graph")
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="xla")
 
-#     def test_kronecker_pilot_patterns_05(self):
-#         "Single UT, only pilots"
-#         num_ut = 1
-#         num_streams_per_tx = 1
-#         num_ofdm_symbols = 5
-#         fft_size = 64
-#         pilot_ofdm_symbol_indices = np.arange(0, num_ofdm_symbols)
-#         rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
-#                   fft_size=fft_size,
-#                   subcarrier_spacing=30e3,
-#                   num_tx=num_ut,
-#                   num_streams_per_tx=num_streams_per_tx,
-#                   cyclic_prefix_length=0,
-#                   pilot_pattern="kronecker",
-#                   pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
-#         check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
+    def test_kronecker_pilot_patterns_05(self):
+        "Single UT, only pilots"
+        num_ut = 1
+        num_streams_per_tx = 1
+        num_ofdm_symbols = 5
+        fft_size = 64
+        pilot_ofdm_symbol_indices = np.arange(0, num_ofdm_symbols)
+        rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
+                  fft_size=fft_size,
+                  subcarrier_spacing=30e3,
+                  num_tx=num_ut,
+                  num_streams_per_tx=num_streams_per_tx,
+                  cyclic_prefix_length=0,
+                  pilot_pattern="kronecker",
+                  pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
+        check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="graph")
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="xla")
 
-#     def test_kronecker_pilot_patterns_06(self):
-#         num_ut = 4
-#         num_streams_per_tx = 1
-#         num_ofdm_symbols = 14
-#         fft_size = 64
-#         pilot_ofdm_symbol_indices = [2,3,8, 11]
-#         rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
-#                   fft_size=fft_size,
-#                   subcarrier_spacing=30e3,
-#                   num_tx=num_ut,
-#                   num_streams_per_tx=num_streams_per_tx,
-#                   cyclic_prefix_length=0,
-#                   pilot_pattern="kronecker",
-#                   pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
-#         check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
+    def test_kronecker_pilot_patterns_06(self):
+        num_ut = 4
+        num_streams_per_tx = 1
+        num_ofdm_symbols = 14
+        fft_size = 64
+        pilot_ofdm_symbol_indices = [2,3,8, 11]
+        rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
+                  fft_size=fft_size,
+                  subcarrier_spacing=30e3,
+                  num_tx=num_ut,
+                  num_streams_per_tx=num_streams_per_tx,
+                  cyclic_prefix_length=0,
+                  pilot_pattern="kronecker",
+                  pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
+        check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="graph")
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="xla")
 
-#     def test_kronecker_pilot_patterns_with_time_averaging(self):
-#         num_ut = 4
-#         num_streams_per_tx = 1
-#         num_ofdm_symbols = 14
-#         fft_size = 64
-#         pilot_ofdm_symbol_indices = [2,11]
-#         rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
-#                   fft_size=fft_size,
-#                   subcarrier_spacing=30e3,
-#                   num_tx=num_ut,
-#                   num_streams_per_tx=num_streams_per_tx,
-#                   cyclic_prefix_length=0,
-#                   pilot_pattern="kronecker",
-#                   pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
-#         check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
+    def test_kronecker_pilot_patterns_with_time_averaging(self):
+        num_ut = 4
+        num_streams_per_tx = 1
+        num_ofdm_symbols = 14
+        fft_size = 64
+        pilot_ofdm_symbol_indices = [2,11]
+        rg = ResourceGrid(num_ofdm_symbols=num_ofdm_symbols,
+                  fft_size=fft_size,
+                  subcarrier_spacing=30e3,
+                  num_tx=num_ut,
+                  num_streams_per_tx=num_streams_per_tx,
+                  cyclic_prefix_length=0,
+                  pilot_pattern="kronecker",
+                  pilot_ofdm_symbol_indices=pilot_ofdm_symbol_indices)
+        check_linear_interpolation(self, rg.pilot_pattern, mode="eager")
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="graph")
 #         check_linear_interpolation(self, rg.pilot_pattern, mode="xla")
 

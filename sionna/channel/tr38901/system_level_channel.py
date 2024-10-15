@@ -200,13 +200,16 @@ class SystemLevelChannel(ChannelModel):
         # Default is downlink, so we need to do some tranpose to switch tx and
         # rx and to switch angle of arrivals and departure if direction is set
         # to uplink. Nothing needs to be done if direction is downlink
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', rays.zod.numpy())
         if self._scenario.direction == "uplink":
             aoa = rays.aoa
             zoa = rays.zoa
             aod = rays.aod
             zod = rays.zod
+            # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', zoa.numpy())
             rays.aod = tf.transpose(aoa, [0, 2, 1, 3, 4])
             rays.zod = tf.transpose(zoa, [0, 2, 1, 3, 4])
+            # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', rays.zod.numpy())
             rays.aoa = tf.transpose(aod, [0, 2, 1, 3, 4])
             rays.zoa = tf.transpose(zod, [0, 2, 1, 3, 4])
             rays.powers = tf.transpose(rays.powers, [0, 2, 1, 3])
@@ -234,17 +237,21 @@ class SystemLevelChannel(ChannelModel):
         # pylint: disable=unbalanced-tuple-unpacking
         # print('input:------------------',num_time_samples, sampling_frequency,
         #                               k_factor, rays, topology, c_ds)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', rays.zod.numpy())
         h, delays = self._cir_sampler(num_time_samples, sampling_frequency,
                                       k_factor, rays, topology, c_ds)
 
         # Step 12
         # print('h:------',h)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', h.numpy())
         h = self._step_12(h, sf)
 
         # Reshaping to match the expected output
         h = tf.transpose(h, [0, 2, 4, 1, 5, 3, 6])
         delays = tf.transpose(delays, [0, 2, 1, 3])
         # print('h:------',h)
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', h.numpy())
+
         # Stop gadients to avoid useless backpropagation
         h = tf.stop_gradient(h)
         # print('h:------',h)
