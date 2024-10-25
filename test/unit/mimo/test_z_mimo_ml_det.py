@@ -1,11 +1,10 @@
-import sys
-sys.path.insert(0, 'D:\sionna-main')
+
 import torch
 try:
     import comcloak
 except ImportError as e:
     import sys
-    sys.path.append("../")
+    sys.path.append("./")
 # import pytest
 import unittest
 import numpy as np
@@ -60,18 +59,18 @@ class TestSymbolMaximumLikelihoodDetector(unittest.TestCase):
                     batch_size = 8
                     dim1 = 3
                     dim2 = 5
-                    y = torch.complex(torch.randn(batch_size, dim1, dim2, num_rx_ant),
-                                      torch.randn(batch_size, dim1, dim2, num_rx_ant))
-                    h = torch.complex(torch.randn(batch_size, dim1, dim2, num_rx_ant, num_streams),
-                                      torch.randn(batch_size, dim1, dim2, num_rx_ant, num_streams))
+                    y = torch.complex( torch.tensor(np.random.normal(size = [batch_size, dim1, dim2, num_rx_ant]),dtype=torch.float32),
+                                       torch.tensor(np.random.normal(size = [batch_size, dim1, dim2, num_rx_ant]),dtype=torch.float32))
+                    h = torch.complex( torch.tensor(np.random.normal(size = [batch_size, dim1, dim2, num_rx_ant, num_streams]),dtype=torch.float32),
+                                       torch.tensor(np.random.normal(size = [batch_size, dim1, dim2, num_rx_ant, num_streams]),dtype=torch.float32))
 
                     s = torch.eye(num_rx_ant, dtype=torch.complex64)
                     logits = ml((y, h, s))
-                    self.assertEqual(logits.shape, [batch_size, dim1, dim2, num_streams, num_points])
+                    self.assertEqual(logits.shape, torch.Size([batch_size, dim1, dim2, num_streams, num_points]))
 
                     s = torch.eye(num_rx_ant, dtype=torch.complex64).expand(batch_size, dim1, dim2, -1, -1)
                     logits = ml((y, h, s))
-                    self.assertEqual(logits.shape, [batch_size, dim1, dim2, num_streams, num_points])
+                    self.assertEqual(logits.shape, torch.Size([batch_size, dim1, dim2, num_streams, num_points]))
 
     def test_logits_calc_eager(self):
         "Test exponents calculation"
@@ -145,7 +144,9 @@ class TestSymbolMaximumLikelihoodDetector(unittest.TestCase):
 
                     test_logits = call_sys_maxlog(torch.tensor(y, dtype=torch.complex64),
                                                   torch.tensor(h, dtype=torch.complex64),
-                                                  torch.tensor(s, dtype=torch.complex64)).numpy()
+                                                  torch.tensor(s, dtype=torch.complex64))
+                    max_values, _ = test_logits
+                    test_logits = max_values.numpy()
                     self.assertTrue(np.allclose(test_logits, ref_maxlog, atol=1e-5))
 
 
@@ -186,16 +187,21 @@ class TestMaximumLikelihoodDetectorWithPrior(unittest.TestCase):
                     batch_size = 8
                     dim1 = 3
                     dim2 = 5
-                    y = torch.randn(batch_size, dim1, dim2, num_rx_ant, dtype=torch.cfloat)
-                    h = torch.randn(batch_size, dim1, dim2, num_rx_ant, num_streams, dtype=torch.cfloat)
-                    prior = torch.randn(batch_size, dim1, dim2, num_streams, num_points)
+                    y = torch.complex(torch.tensor(np.random.normal(size = [batch_size, dim1, dim2, num_rx_ant]),dtype=torch.float32),
+                                      torch.tensor(np.random.normal(size = [batch_size, dim1, dim2, num_rx_ant]),dtype=torch.float32))
+                    h = torch.complex(torch.tensor(np.random.normal(size = [batch_size, dim1, dim2, num_rx_ant, num_streams]),dtype=torch.float32),
+                                      torch.tensor(np.random.normal(size = [batch_size, dim1, dim2, num_rx_ant, num_streams]),dtype=torch.float32))
+                    prior = torch.tensor(np.random.normal(size = [batch_size, dim1, dim2, num_streams, num_points]),dtype=torch.float32)
 
-                    s = torch.eye(num_rx_ant, dtype=torch.cfloat)
-                    logits = ml(y, h, prior, s)
+                    s = torch.eye(num_rx_ant, dtype=torch.complex64)
+                    inputs = y, h, prior, s
+                    logits = ml(inputs)
                     self.assertEqual(logits.shape, (batch_size, dim1, dim2, num_streams, num_points))
 
-                    s = torch.eye(num_rx_ant, dtype=torch.cfloat).expand(batch_size, dim1, dim2, -1)
-                    logits = ml(y, h, prior, s)
+                    s = torch.eye(num_rx_ant, dtype=torch.complex64).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+                    s = s.expand(batch_size, dim1, dim2, num_rx_ant, num_rx_ant) 
+                    inputs = y, h, prior, s
+                    logits = ml(inputs)
                     self.assertEqual(logits.shape, (batch_size, dim1, dim2, num_streams, num_points))
 
     def test_logits_calc_eager(self):
@@ -237,17 +243,17 @@ class TestMaximumLikelihoodDetectorWithPrior(unittest.TestCase):
                     ref_vecs, ref_vecs_ind, ref_c = build_vecs(num_bits_per_symbol, num_streams)
                     num_vecs = ref_vecs.shape[0]
 
-                    y = torch.randn(batch_size, num_rx_ant, dtype=torch.cfloat)
-                    h = torch.randn(batch_size, num_rx_ant, num_streams, dtype=torch.cfloat)
-                    prior = torch.randn(batch_size, num_streams, num_points)
+                    y = np.random.normal(size=[batch_size, num_rx_ant]) + 1j*np.random.normal(size=[batch_size, num_rx_ant])
+                    h = np.random.normal(size=[batch_size, num_rx_ant, num_streams]) + 1j*np.random.normal(size=[batch_size, num_rx_ant, num_streams])
+                    prior = np.random.normal(size=[batch_size, num_streams, num_points])
                     e = np.random.uniform(low=0.5, high=2.0, size=[batch_size, num_rx_ant])
                     e = np.expand_dims(np.eye(num_rx_ant), axis=0) * np.expand_dims(e, -2)
                     u = unitary_group.rvs(dim=num_rx_ant)
                     u = np.expand_dims(u, axis=0)
                     s = np.matmul(u, np.matmul(e, np.conjugate(np.transpose(u, [0, 2, 1]))))
 
-                    diff = np.transpose(np.matmul(h.numpy(), ref_vecs.T), [0, 2, 1])
-                    diff = np.expand_dims(y.numpy(), axis=1) - diff
+                    diff = np.transpose(np.matmul(h, ref_vecs.T), [0, 2, 1])
+                    diff = np.expand_dims(y, axis=1) - diff
                     s_inv = np.linalg.inv(s)
                     s_inv = np.expand_dims(s_inv, axis=-3)
                     diff_ = np.expand_dims(diff, axis=-1)
@@ -274,7 +280,8 @@ class TestMaximumLikelihoodDetectorWithPrior(unittest.TestCase):
                     ml = MaximumLikelihoodDetectorWithPrior("symbol", "app", num_streams, "qam", num_bits_per_symbol)
 
                     def call_sys_app(y, h, prior, s):
-                        test_logits = ml(y, h, prior, s)
+                        inputs = y, h, prior, s
+                        test_logits = ml(inputs)
                         return test_logits
 
                     test_logits = call_sys_app(torch.tensor(y, dtype=torch.cfloat),
@@ -286,13 +293,16 @@ class TestMaximumLikelihoodDetectorWithPrior(unittest.TestCase):
                     ml = MaximumLikelihoodDetectorWithPrior("symbol", "maxlog", num_streams, "qam", num_bits_per_symbol)
 
                     def call_sys_maxlog(y, h, prior, s):
-                        test_logits = ml(y, h, prior, s)
+                        inputs = y, h, prior, s
+                        test_logits = ml(inputs)
                         return test_logits
 
                     test_logits = call_sys_maxlog(torch.tensor(y, dtype=torch.cfloat),
                                                   torch.tensor(h, dtype=torch.cfloat),
                                                   torch.tensor(prior, dtype=torch.float32),
-                                                  torch.tensor(s, dtype=torch.cfloat)).numpy()
+                                                  torch.tensor(s, dtype=torch.cfloat))
+                    max_values, _ = test_logits
+                    test_logits = max_values.numpy()
                     self.assertTrue(np.allclose(test_logits, ref_maxlog, atol=1e-5))
 
 
