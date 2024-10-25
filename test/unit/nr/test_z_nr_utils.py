@@ -1,29 +1,20 @@
-#
-# SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-#
 try:
-    import sionna
+    import comcloak
 except ImportError as e:
     import sys
     sys.path.append("./")
 
 import unittest
 import numpy as np
-import tensorflow as tf
-gpus = tf.config.list_physical_devices('GPU')
-print('Number of GPUs available :', len(gpus))
-if gpus:
-    gpu_num = 0 # Number of the GPU to be used
-    try:
-        tf.config.set_visible_devices(gpus[gpu_num], 'GPU')
-        print('Only GPU number', gpu_num, 'used.')
-        tf.config.experimental.set_memory_growth(gpus[gpu_num], True)
-    except RuntimeError as e:
-        print(e)
+import torch
+# GPU configuration
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print('Number of GPUs available :', torch.cuda.device_count())
+if torch.cuda.is_available():
+    gpu_num = 0  # Number of the GPU to be used
+    print('Only GPU number', gpu_num, 'used.')
 
-from sionna.nr.utils import select_mcs, generate_prng_seq, calculate_tb_size
-
+from comcloak.nr.utils import select_mcs, generate_prng_seq, calculate_tb_size
 
 class TestNRUtils(unittest.TestCase):
     """Test nr_utils function"""
@@ -385,6 +376,7 @@ class TestNRUtils(unittest.TestCase):
 
                             #### verify results #####
                             verify_results(retval, r, n_res)
+
 
 if __name__ == '__main__':
     unittest.main()

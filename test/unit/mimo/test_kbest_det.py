@@ -83,11 +83,6 @@ class MIMODetectionBER(tf.keras.Model):
             return b, b_hat
 
 
-
-
-
-
-
 class TestKBestDetector(unittest.TestCase):
 
     def test_wrong_parameters(self):

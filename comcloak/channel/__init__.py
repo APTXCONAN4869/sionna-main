@@ -4,7 +4,7 @@
 
 # pylint: disable=line-too-long
 from .awgn import AWGN
-# from .spatial_correlation import SpatialCorrelation, KroneckerModel, PerColumnModel
+from .spatial_correlation import SpatialCorrelation, KroneckerModel, PerColumnModel
 from .flat_fading_channel import GenerateFlatFadingChannel, ApplyFlatFadingChannel, FlatFadingChannel
 from .channel_model import ChannelModel
 from . import tr38901
