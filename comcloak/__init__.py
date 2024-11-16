@@ -11,7 +11,7 @@ from . import utils
 from .constants import *
 # from . import nr
 # from . import fec
-# from . import mapping
+from . import mapping
 from . import ofdm
 from . import mimo
 from . import channel

@@ -1,17 +1,10 @@
-#
-# SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-#
-"""Layer mapping for the 5G NR sub-package of the Sionna library.
-"""
-
-import tensorflow as tf
-from tensorflow.keras.layers import Layer
-from sionna.utils import flatten_last_dims, split_dim
-
-class LayerMapper(Layer):
-    # pylint: disable=line-too-long
-    r"""LayerMapper(num_layers=1, verbose=False, **kwargs)
+import torch
+import torch.nn as nn
+import numpy as np
+from comcloak.utils import flatten_last_dims, split_dim
+class LayerMapper(nn.Module):
+    r"""
+    LayerMapper(num_layers=1, verbose=False, **kwargs)
     Performs MIMO layer mapping of modulated symbols to layers as defined in
     [3GPP38211]_.
 
@@ -28,38 +21,29 @@ class LayerMapper(Layer):
     Parameters
     ----------
         num_layers: int, 1 (default) | [1,...,8]
-            Number of MIMO layers. If
-            ``num_layers`` >=4, a list of two inputs is expected.
-
+            Number of MIMO layers. If ``num_layers`` >=4, a list of two inputs is expected.
         verbose: bool, False (default)
             If True, additional parameters are printed.
 
     Input
     -----
-        inputs: [...,n], or [[...,n1], [...,n2]], tf.complex
-            2+D tensor containing the sequence of symbols to be mapped. If
-            ``num_layers`` >=4, a list of two inputs is expected and `n1`/`n2`
-            must be chosen as defined in Tab. 7.3.1.3.-1 [3GPP38211]_.
+        inputs: [batch_size, n], or [[batch_size, n1], [batch_size, n2]], torch.complex
+            2+D tensor containing the sequence of symbols to be mapped. If ``num_layers`` >=4,
+            a list of two inputs is expected and `n1`/`n2` must match 3GPP requirements.
 
     Output
     ------
-        : [...,num_layers, n/num_layers], tf.complex
-            2+D tensor containing the sequence of symbols mapped to the MIMO
-            layers.
+        : [batch_size, num_layers, n/num_layers], torch.complex
+            2+D tensor containing the sequence of symbols mapped to the MIMO layers.
     """
 
-    def __init__(self,
-                 num_layers=1,
-                 verbose=False,
-                 **kwargs):
-
-        super().__init__(**kwargs)
-
+    def __init__(self, num_layers=1, verbose=False):
+        super(LayerMapper, self).__init__()
+        self.weights = None
         assert isinstance(verbose, bool), "verbose must be bool"
         self._verbose = verbose
 
-        assert num_layers in range(1,9), \
-                            'num_layers must be between 1 and 8.'
+        assert num_layers in range(1, 9), 'num_layers must be between 1 and 8.'
         self._num_layers = num_layers
 
         # follow Tab. 7.3.1.3-1 from 38.211 for CW multiplexing
@@ -91,7 +75,6 @@ class LayerMapper(Layer):
                       "defined in Tab. 7.3.1.3-1 from 38.211 applied.")
                 print(f"Length of cw1/cw2: {self._num_layers0}/"\
                       f"{self._num_layers1} ")
-
     #########################################
     # Public methods and properties
     #########################################
@@ -121,25 +104,23 @@ class LayerMapper(Layer):
         if self._num_codewords==1:
             return 0 # no second stream
         return self._num_layers1
-
-    def build(self, input_shapes):
+    def forward(self, inputs):
         """Test input shapes for consistency."""
-
+        if isinstance(inputs, (list, tuple)):
+            self.weights = [x.shape for x in inputs]
+        else:
+            self.weights = inputs.shape
         if self._num_codewords==1: # single cw mode
-            
-            assert not isinstance(input_shapes[0], tf.TensorShape),\
-                            "Only single input codeword expected."
-            assert input_shapes[-1]%self._num_layers==0,\
+            assert not isinstance(self.weights[0], torch.Size), \
+                        "Only single input codeword expected."
+            assert self.weights[-1]%self._num_layers==0,\
                     "Invalid input dimensions: last dimension must be a " \
                     "multiple of num_layers."
         else: # dual cw mode
             # inputs must be a list of two streams
-            s0 = input_shapes[0].as_list()
-            s1 = input_shapes[1].as_list()
-            assert isinstance(s0, list), \
-                            "List of two inputs streams is expected."
-            assert isinstance(s1, list), \
-                            "List of two inputs streams is expected."
+            s0 = list(self.weights[0])
+            s1 = list(self.weights[1])
+            
 
             assert s0[-1]%self._num_layers0==0,\
                     "Invalid input dimensions: last dimension of first input "\
@@ -153,13 +134,12 @@ class LayerMapper(Layer):
                     f"Invalid input dimensions: length of first input must be "\
                     f"{self._num_layers0/self._num_layers1:.2f} of the length "\
                     f"of the second input."
-
-    def call(self, inputs):
         """Applies MIMO Layer mapping as defined in Sec. 6.3.1.3 and Sec.
         7.3.1.3 38.211."""
-
+        
         if self._num_codewords==1:
             s = inputs.shape[-1]
+            # inputs = inputs
             y = split_dim(inputs,(int(s/self._num_layers), self._num_layers),
                           axis=len(inputs.shape)-1)
         else:
@@ -174,16 +154,21 @@ class LayerMapper(Layer):
             y1 = split_dim(x1,(int(s1/self._num_layers1), self._num_layers1),
                            axis=len(x1.shape)-1)
 
-            y = tf.concat([y0, y1], axis=-1)
+            y = y = np.concatenate((y0, y1), axis=-1)
 
         # swap last two dimensions
-        print(y.shape)
-        y = tf.experimental.numpy.swapaxes(y, axis1=-1, axis2=-2)
-        return y
+        # print(y.shape)
+        # y = y.transpose(-1, -2)
+        y = np.swapaxes(y, -1, -2)
+        
+        
+        return torch.tensor(y)
 
-class LayerDemapper(Layer):
-    # pylint: disable=line-too-long
-    r"""LayerDemapper(layer_mapper, num_bits_per_symbol=1, **kwargs)
+
+class LayerDemapper(nn.Module):
+    """
+    LayerDemapper(layer_mapper, num_bits_per_symbol=1)
+
     Demaps MIMO layers to coded transport block(s) by following Sec. 6.3.1.3
     and Sec. 7.3.1.3 in [3GPP38211]_.
 
@@ -202,60 +187,46 @@ class LayerDemapper(Layer):
 
     Parameters
     ----------
-        layer_mapper: :class:`~sionna.nr.LayerMapper`
+        layer_mapper: LayerMapper
             Associated LayerMapper.
-
         num_bits_per_symbol: int, 1 (default)
-            Modulation order. Defines how many consecutive LLRs are associated
-            to the same symbol position.
+            Modulation order. Defines how many consecutive LLRs are associated to the same symbol position.
 
     Input
     -----
-        inputs : [...,num_layers, n/num_layers], tf.float
+        inputs : [batch_size, num_layers, n/num_layers], torch.float
             2+D tensor containing MIMO layer data sequences.
 
     Output
     ------
-        : [...,n], or [[...,n1], [...,n2]], tf.float
+        : [batch_size, n], or [[batch_size, n1], [batch_size, n2]], torch.float
             2+D tensor containing the sequence of bits after layer demapping.
-            If ``num_codewords`` =2, a list of two transport blocks is returned.
-
-    Note
-    ----
-    As it is more convenient to apply the layer demapper after demapping
-    symbols to LLRs, this layer groups the input sequence into groups of
-    ``num_bits_per_symbol`` LLRs before restoring the original symbol sequence.
-    This behavior can be deactivated by setting ``num_bits_per_symbol`` =1.
     """
 
-    def __init__(self,
-                 layer_mapper,
-                 num_bits_per_symbol=1,
-                 **kwargs):
-
-        super().__init__(**kwargs)
-
-        assert isinstance(layer_mapper, LayerMapper), \
-                    "layer_mapper must be LayerMapper."
+    def __init__(self, layer_mapper, num_bits_per_symbol=1):
+        super(LayerDemapper, self).__init__()
+        self.weights = None
+        assert isinstance(layer_mapper, LayerMapper), "layer_mapper must be LayerMapper."
         self._mapper = layer_mapper
 
-        assert num_bits_per_symbol%1==0, \
-                    "num_bits_per_symbol must be int."
+        assert isinstance(num_bits_per_symbol, int) and num_bits_per_symbol > 0, \
+            "num_bits_per_symbol must be a positive integer."
         self._num_bits_per_symbol = num_bits_per_symbol
 
-    def build(self, input_shapes):
+    def forward(self, inputs):
         """Test input shapes for consistency."""
-
+        if isinstance(inputs, (list, tuple)):
+            self.weights = [x.shape for x in inputs]
+        else:
+            self.weights = inputs.shape
         # check that second last dimension equals number of expected streams
         num_layers = self._mapper.num_layers
-        assert input_shapes.as_list()[-2]==num_layers, \
+        assert list(self.weights)[-2]==num_layers, \
             "Invalid input dimension: input shape must be [...,num_layers,n]."
 
-        assert input_shapes.as_list()[-1]%self._num_bits_per_symbol==0, \
+        assert list(self.weights)[-1]%self._num_bits_per_symbol==0, \
             "Invalid input dimension: last dimension must be a multiple of " \
             "num_bits_per_symbol."
-
-    def call(self, inputs):
         """Demaps multiple layers back to transport block stream(s)."""
 
         # group llrs into blocks of num_bits_per_symbol values
@@ -264,9 +235,7 @@ class LayerDemapper(Layer):
                      (int(s/self._num_bits_per_symbol),
                       self._num_bits_per_symbol),
                      axis=len(inputs.shape)-1)
-
-        # swap last dimensions
-        x = tf.experimental.numpy.swapaxes(x, axis1=-2, axis2=-3)
+        x = np.swapaxes(x, -2, -3)
 
         if self._mapper.num_codewords==1:
             y = flatten_last_dims(x, num_dims=3)
@@ -280,4 +249,3 @@ class LayerDemapper(Layer):
             y1 = flatten_last_dims(x[...,self._mapper.num_layers0:,:],
                                    num_dims=3)
             return [y0, y1]
-

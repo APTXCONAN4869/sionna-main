@@ -713,10 +713,13 @@ class SymbolLogits2LLRs(nn.Module):
         # Compute LLRs using the definition log( Pr(b=1)/Pr(b=0) )
         # shape [..., n, num_bits_per_symbol]
         if self._with_prior:
-            llr = self._reduce(exp_ps1 + exp1, axis=-2)\
-                    - self._reduce(exp_ps0 + exp0, axis=-2)
+            max_exp1, _ = self._reduce(exp_ps1 + exp1, axis=-2)
+            max_exp0, _ = self._reduce(exp_ps0 + exp0, axis=-2)
+            llr = max_exp1 - max_exp0
         else:
-            llr = self._reduce(exp1, axis=-2) - self._reduce(exp0, axis=-2)
+            max_exp1, _ = self._reduce(exp1, axis=-2)  
+            max_exp0, _ = self._reduce(exp0, axis=-2)  
+            llr = max_exp1 - max_exp0
 
         if self._hard_out:
             return comcloak.utils.hard_decisions(llr)
@@ -975,7 +978,7 @@ class Demapper(nn.Module):
                                               dtype_real_dtype,
                                               **kwargs)
 
-        self._no_threshold = torch.tensor(np.finfo(dtype.as_numpy_dtype).tiny, dtype=dtype_real_dtype)
+        self._no_threshold = torch.tensor(np.finfo(torch.empty(0, dtype=dtype).numpy().dtype).tiny, dtype=dtype_real_dtype)
 
     @property
     def constellation(self):
@@ -996,7 +999,8 @@ class Demapper(nn.Module):
         squared_dist = torch.abs(y.unsqueeze(-1) - points) ** 2
 
         # Add a dummy dimension for broadcasting
-        no = no.unsqueeze(-1)
+        
+        no = torch.tensor(no).unsqueeze(-1)
         no = torch.maximum(no, self._no_threshold)
 
         # Compute exponents

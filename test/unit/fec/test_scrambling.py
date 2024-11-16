@@ -6,7 +6,7 @@ try:
     import sionna
 except ImportError as e:
     import sys
-    sys.path.append("../")
+    sys.path.append("./")
 
 import unittest
 import numpy as np
@@ -441,7 +441,6 @@ class TestScrambler(unittest.TestCase):
             self.assertTrue(np.array_equal(x, z.numpy()))
             self.assertTrue(np.array_equal(y.numpy(), y2.numpy()))
 
-
 class TestTB5GScrambler(unittest.TestCase):
 
     def test_sequence_dimension(self):
@@ -516,7 +515,6 @@ class TestTB5GScrambler(unittest.TestCase):
         x = s(llr)
         x = s(x)
         self.assertTrue(np.array_equal(x.numpy(), llr.numpy()))
-
 
     def test_keras(self):
         """Test that Keras model can be compiled (supports dynamic shapes)."""
@@ -639,7 +637,6 @@ class TestTB5GScrambler(unittest.TestCase):
         assert (np.array_equal(x2.numpy(), x3.numpy()))
         assert (np.array_equal(x1.numpy(), 0.5*(1+x4.numpy())))
 
-
     def test_5gnr_reference(self):
         """Test against 5G NR reference."""
 
@@ -723,7 +720,6 @@ class TestTB5GScrambler(unittest.TestCase):
                         channel_type="PDSCH")(tf.zeros((1, l)))
         self.assertFalse(np.array_equal(s_ref, s))
 
-
     def test_multi_user(self):
         """Test multi-stream functionality.
         If n_rnti and n_id are provided as list of ints, the axis=-2 dimension
@@ -755,3 +751,6 @@ class TestTB5GScrambler(unittest.TestCase):
         u_hat = Descrambler(scrambler)(s).numpy()
 
         self.assertTrue(np.array_equal(u_hat, np.zeros_like(u_hat)))
+
+if __name__ == '__main__':
+    unittest.main()

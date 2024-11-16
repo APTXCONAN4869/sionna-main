@@ -7,7 +7,7 @@ try:
 except ImportError as e:
     import sys
     sys.path.append("./")
-import pytest
+# import pytest
 import unittest
 import numpy as np
 import tensorflow as tf

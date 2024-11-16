@@ -1,31 +1,24 @@
-#
-# SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-#
+import os
+print("Current directory:", os.getcwd())
 try:
-    import sionna
+    import comcloak
 except ImportError as e:
     import sys
     sys.path.append("./")
-
+# import pytest
 import unittest
 import numpy as np
-import tensorflow as tf
-gpus = tf.config.list_physical_devices('GPU')
-print('Number of GPUs available :', len(gpus))
-if gpus:
-    gpu_num = 0 # Number of the GPU to be used
-    try:
-        tf.config.set_visible_devices(gpus[gpu_num], 'GPU')
-        print('Only GPU number', gpu_num, 'used.')
-        tf.config.experimental.set_memory_growth(gpus[gpu_num], True)
-    except RuntimeError as e:
-        print(e)
+import torch
+# GPU configuration
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print('Number of GPUs available :', torch.cuda.device_count())
+if torch.cuda.is_available():
+    gpu_num = 0  # Number of the GPU to be used
+    print('Only GPU number', gpu_num, 'used.')
 
-from sionna.nr import LayerMapper, LayerDemapper
-from sionna.utils import BinarySource, hard_decisions
-from sionna.mapping import Mapper, Demapper
-
+from comcloak.nr import LayerMapper, LayerDemapper
+from comcloak.utils import BinarySource, hard_decisions
+from comcloak.mapping import Mapper, Demapper
 
 class TestLayerMapper(unittest.TestCase):
     """Tests for LayerMapper"""
@@ -33,66 +26,66 @@ class TestLayerMapper(unittest.TestCase):
     def test_ref(self):
         """Test against predefined sequences."""
 
-        # # single layer
-        # u = np.array([[1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0,
-        #                0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0,
-        #                0, 1, 1, 0, 1, 0,1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0,
-        #                1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1,
-        #                0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1,
-        #                1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1,
-        #                0, 1, 0, 0, 1, 1]])
+        # single layer
+        u = np.array([[1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0,
+                       0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0,
+                       0, 1, 1, 0, 1, 0,1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0,
+                       1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1,
+                       0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1,
+                       1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1,
+                       0, 1, 0, 0, 1, 1]])
 
-        # o1 = np.array([[[1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1,
-        #                  0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1,
-        #                  1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1,
-        #                  1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0,
-        #                  1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1,
-        #                  1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0,
-        #                  0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1]]])
+        o1 = np.array([[[1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1,
+                         0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1,
+                         1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1,
+                         1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0,
+                         1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1,
+                         1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0,
+                         0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1]]])
 
-        # o2 = np.array([[[1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1,
-        #                  1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1,
-        #                  1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1,
-        #                  0, 1, 1, 0, 0, 1], [1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0,
-        #                  1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1,
-        #                  1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0,
-        #                  1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 1]]])
+        o2 = np.array([[[1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1,
+                         1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1,
+                         1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1,
+                         0, 1, 1, 0, 0, 1], [1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0,
+                         1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1,
+                         1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0,
+                         1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 1]]])
 
-        # o3 = np.array([[[1, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 1,
-        #                  1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 1,
-        #                  0, 1, 0, 0], [1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
-        #                  1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0,
-        #                  1, 1, 0, 0, 1, 1, 1, 1, 1], [0, 1, 0, 1, 0, 1, 1, 1,
-        #                  1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1,
-        #                  0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1]]])
+        o3 = np.array([[[1, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 1,
+                         1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 1,
+                         0, 1, 0, 0], [1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+                         1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0,
+                         1, 1, 0, 0, 1, 1, 1, 1, 1], [0, 1, 0, 1, 0, 1, 1, 1,
+                         1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1,
+                         0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1]]])
 
-        # o4=np.array([[[1, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1,
-        #                0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0], [1, 1, 0, 1, 1, 0, 1,
-        #                1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 1, 1, 0, 1, 0,
-        #                1, 1, 1, 0], [0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1,
-        #                0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1], [1, 0,
-        #                1, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 0,
-        #                1, 0, 1, 1, 0, 0, 1, 1, 1]]])
+        o4=np.array([[[1, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1,
+                       0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0], [1, 1, 0, 1, 1, 0, 1,
+                       1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 1, 1, 0, 1, 0,
+                       1, 1, 1, 0], [0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1,
+                       0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1], [1, 0,
+                       1, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 0,
+                       1, 0, 1, 1, 0, 0, 1, 1, 1]]])
 
-        # # 1 layer
-        # mapper = LayerMapper(num_layers=1)
-        # o = mapper(u)
-        # self.assertTrue(np.array_equal(o.numpy(), o1))
+        # 1 layer
+        mapper = LayerMapper(num_layers=1)
+        o = mapper(u)
+        self.assertTrue(np.array_equal(o.numpy(), o1))
 
-        # # 2 layer
-        # mapper = LayerMapper(num_layers=2)
-        # o = mapper(u)
-        # self.assertTrue(np.array_equal(o.numpy(), o2))
+        # 2 layer
+        mapper = LayerMapper(num_layers=2)
+        o = mapper(u)
+        self.assertTrue(np.array_equal(o.numpy(), o2))
 
-        # # 3 layer
-        # mapper = LayerMapper(num_layers=3)
-        # o = mapper(u)
-        # self.assertTrue(np.array_equal(o.numpy(), o3))
+        # 3 layer
+        mapper = LayerMapper(num_layers=3)
+        o = mapper(u)
+        self.assertTrue(np.array_equal(o.numpy(), o3))
 
-        # # 4 layer
-        # mapper = LayerMapper(num_layers=4)
-        # o = mapper(u)
-        # self.assertTrue(np.array_equal(o.numpy(), o4))
+        # 4 layer
+        mapper = LayerMapper(num_layers=4)
+        o = mapper(u)
+        self.assertTrue(np.array_equal(o.numpy(), o4))
 
         ####### dual codeword scenario ######
 
@@ -310,6 +303,7 @@ class TestLayerDemapper(unittest.TestCase):
 
             self.assertTrue(np.array_equal(u0.numpy(), u_hat0.numpy()))
             self.assertTrue(np.array_equal(u1.numpy(), u_hat1.numpy()))
+
 
 if __name__ == '__main__':
     unittest.main()

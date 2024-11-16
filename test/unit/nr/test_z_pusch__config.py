@@ -1,35 +1,26 @@
-#
-# SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-#
 try:
-    import sionna
+    import comcloak
 except ImportError as e:
     import sys
     sys.path.append("./")
 
 import unittest
 import numpy as np
-import tensorflow as tf
-gpus = tf.config.list_physical_devices('GPU')
-print('Number of GPUs available :', len(gpus))
-if gpus:
-    gpu_num = 0 # Number of the GPU to be used
-    try:
-        tf.config.set_visible_devices(gpus[gpu_num], 'GPU')
-        print('Only GPU number', gpu_num, 'used.')
-        tf.config.experimental.set_memory_growth(gpus[gpu_num], True)
-    except RuntimeError as e:
-        print(e)
-
-from sionna.nr import PUSCHConfig
+import torch
+from comcloak.nr import PUSCHConfig
+# GPU configuration
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print('Number of GPUs available :', torch.cuda.device_count())
+if torch.cuda.is_available():
+    gpu_num = 0  # Number of the GPU to be used
+    print('Only GPU number', gpu_num, 'used.')
 
 class TestPUSCHDMRS(unittest.TestCase):
     """Tests for the PUSCHDMRS Class"""
 
     def test_against_reference_1(self):
         """Test that DMRS pattenrs match a reference implementation"""
-        reference_dmrs = np.load("unit/nr/reference_dmrs_1.npy")
+        reference_dmrs = np.load("./test/unit/nr/reference_dmrs_1.npy")
         pusch_config = PUSCHConfig()
         pusch_config.carrier.n_size_grid = 1
         pusch_config.dmrs.config_type = 2
@@ -53,7 +44,7 @@ class TestPUSCHDMRS(unittest.TestCase):
 
     def test_against_reference_2(self):
         """Test that DMRS pattenrs match a reference implementation"""
-        reference_dmrs = np.load("unit/nr/reference_dmrs_2.npy")
+        reference_dmrs = np.load("./test/unit/nr/reference_dmrs_2.npy")
         pusch_config = PUSCHConfig()
         pusch_config.carrier.n_size_grid = 4
         pusch_config.dmrs.config_type = 2
@@ -193,7 +184,7 @@ class TestPUSCHDMRS(unittest.TestCase):
         # 1-Layer 2-Antenna Ports
         pusch_config.num_layers = 1
         pusch_config.num_antenna_ports = 2
-        ref = np.load(f"unit/nr/pusch_dmrs_precoded_{pusch_config.num_layers}_layer_{pusch_config.num_antenna_ports}_ports.npy", allow_pickle=True)
+        ref = np.load(f"./test/unit/nr/pusch_dmrs_precoded_{pusch_config.num_layers}_layer_{pusch_config.num_antenna_ports}_ports.npy", allow_pickle=True)
         for i in range(6):
             pusch_config.tpmi = i
             self.assertTrue(np.allclose(pusch_config.dmrs_grid_precoded/np.sqrt(3), ref[i]))
@@ -201,7 +192,7 @@ class TestPUSCHDMRS(unittest.TestCase):
         # 1-Layer 4-Antenna Ports
         pusch_config.num_layers = 1
         pusch_config.num_antenna_ports = 4
-        ref = np.load(f"unit/nr/pusch_dmrs_precoded_{pusch_config.num_layers}_layer_{pusch_config.num_antenna_ports}_ports.npy", allow_pickle=True)
+        ref = np.load(f"./test/unit/nr/pusch_dmrs_precoded_{pusch_config.num_layers}_layer_{pusch_config.num_antenna_ports}_ports.npy", allow_pickle=True)
         for i in range(28):
             pusch_config.tpmi = i
             self.assertTrue(np.allclose(pusch_config.dmrs_grid_precoded/np.sqrt(3), ref[i]))
@@ -209,7 +200,7 @@ class TestPUSCHDMRS(unittest.TestCase):
         # 2-Layer 2-Antenna Ports
         pusch_config.num_layers = 2
         pusch_config.num_antenna_ports = 2
-        ref = np.load(f"unit/nr/pusch_dmrs_precoded_{pusch_config.num_layers}_layer_{pusch_config.num_antenna_ports}_ports.npy", allow_pickle=True)
+        ref = np.load(f"./test/unit/nr/pusch_dmrs_precoded_{pusch_config.num_layers}_layer_{pusch_config.num_antenna_ports}_ports.npy", allow_pickle=True)
         for i in range(3):
             pusch_config.tpmi = i
             self.assertTrue(np.allclose(pusch_config.dmrs_grid_precoded/np.sqrt(3), ref[i]))
@@ -217,7 +208,7 @@ class TestPUSCHDMRS(unittest.TestCase):
         # 2-Layer 4-Antenna Ports
         pusch_config.num_layers = 2
         pusch_config.num_antenna_ports = 4
-        ref = np.load(f"unit/nr/pusch_dmrs_precoded_{pusch_config.num_layers}_layer_{pusch_config.num_antenna_ports}_ports.npy", allow_pickle=True)
+        ref = np.load(f"./test/unit/nr/pusch_dmrs_precoded_{pusch_config.num_layers}_layer_{pusch_config.num_antenna_ports}_ports.npy", allow_pickle=True)
         for i in range(22):
             pusch_config.tpmi = i
             self.assertTrue(np.allclose(pusch_config.dmrs_grid_precoded/np.sqrt(3), ref[i]))
@@ -225,7 +216,7 @@ class TestPUSCHDMRS(unittest.TestCase):
         # 3-Layer 4-Antenna Ports
         pusch_config.num_layers = 3
         pusch_config.num_antenna_ports = 4
-        ref = np.load(f"unit/nr/pusch_dmrs_precoded_{pusch_config.num_layers}_layer_{pusch_config.num_antenna_ports}_ports.npy", allow_pickle=True)
+        ref = np.load(f"./test/unit/nr/pusch_dmrs_precoded_{pusch_config.num_layers}_layer_{pusch_config.num_antenna_ports}_ports.npy", allow_pickle=True)
         for i in range(7):
             pusch_config.tpmi = i
             self.assertTrue(np.allclose(pusch_config.dmrs_grid_precoded/np.sqrt(3), ref[i]))
@@ -233,7 +224,10 @@ class TestPUSCHDMRS(unittest.TestCase):
         # 4-Layer 4-Antenna Ports
         pusch_config.num_layers = 4
         pusch_config.num_antenna_ports = 4
-        ref = np.load(f"unit/nr/pusch_dmrs_precoded_{pusch_config.num_layers}_layer_{pusch_config.num_antenna_ports}_ports.npy", allow_pickle=True)
+        ref = np.load(f"./test/unit/nr/pusch_dmrs_precoded_{pusch_config.num_layers}_layer_{pusch_config.num_antenna_ports}_ports.npy", allow_pickle=True)
         for i in range(5):
             pusch_config.tpmi = i
             self.assertTrue(np.allclose(pusch_config.dmrs_grid_precoded/np.sqrt(3), ref[i]))
+
+if __name__ == '__main__':
+    unittest.main()
