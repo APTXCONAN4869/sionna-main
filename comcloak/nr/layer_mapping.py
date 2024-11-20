@@ -39,7 +39,7 @@ class LayerMapper(nn.Module):
 
     def __init__(self, num_layers=1, verbose=False):
         super(LayerMapper, self).__init__()
-        self.weights = None
+        self.shape = None
         assert isinstance(verbose, bool), "verbose must be bool"
         self._verbose = verbose
 
@@ -107,19 +107,19 @@ class LayerMapper(nn.Module):
     def forward(self, inputs):
         """Test input shapes for consistency."""
         if isinstance(inputs, (list, tuple)):
-            self.weights = [x.shape for x in inputs]
+            self.shape = [x.shape for x in inputs]
         else:
-            self.weights = inputs.shape
+            self.shape = inputs.shape
         if self._num_codewords==1: # single cw mode
-            assert not isinstance(self.weights[0], torch.Size), \
+            assert not isinstance(self.shape[0], torch.Size), \
                         "Only single input codeword expected."
-            assert self.weights[-1]%self._num_layers==0,\
+            assert self.shape[-1]%self._num_layers==0,\
                     "Invalid input dimensions: last dimension must be a " \
                     "multiple of num_layers."
         else: # dual cw mode
             # inputs must be a list of two streams
-            s0 = list(self.weights[0])
-            s1 = list(self.weights[1])
+            s0 = list(self.shape[0])
+            s1 = list(self.shape[1])
             
 
             assert s0[-1]%self._num_layers0==0,\
@@ -205,7 +205,7 @@ class LayerDemapper(nn.Module):
 
     def __init__(self, layer_mapper, num_bits_per_symbol=1):
         super(LayerDemapper, self).__init__()
-        self.weights = None
+        self.shape = None
         assert isinstance(layer_mapper, LayerMapper), "layer_mapper must be LayerMapper."
         self._mapper = layer_mapper
 
@@ -216,15 +216,15 @@ class LayerDemapper(nn.Module):
     def forward(self, inputs):
         """Test input shapes for consistency."""
         if isinstance(inputs, (list, tuple)):
-            self.weights = [x.shape for x in inputs]
+            self.shape = [x.shape for x in inputs]
         else:
-            self.weights = inputs.shape
+            self.shape = inputs.shape
         # check that second last dimension equals number of expected streams
         num_layers = self._mapper.num_layers
-        assert list(self.weights)[-2]==num_layers, \
+        assert list(self.shape)[-2]==num_layers, \
             "Invalid input dimension: input shape must be [...,num_layers,n]."
 
-        assert list(self.weights)[-1]%self._num_bits_per_symbol==0, \
+        assert list(self.shape)[-1]%self._num_bits_per_symbol==0, \
             "Invalid input dimension: last dimension must be a multiple of " \
             "num_bits_per_symbol."
         """Demaps multiple layers back to transport block stream(s)."""
