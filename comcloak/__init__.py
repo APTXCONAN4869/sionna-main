@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-"""This is the Sionna library.
+"""This is the Comcloak library.
 """
 
 __version__ = '0.17.0'
