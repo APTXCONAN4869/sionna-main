@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import comcloak
-from comcloak.supplememt import gather_pytorch,get_real_dtype
+from comcloak.supplement import gather_pytorch, get_real_dtype
 # from comcloak.utils import expand_to_rank, hard_decisions, flatten_last_dims
 def pam_gray(b):
     # pylint: disable=line-too-long

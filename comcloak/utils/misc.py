@@ -8,9 +8,10 @@ import torch.nn as nn
 import numpy as np
 # from comcloak.utils.metrics import count_errors, count_block_errors
 from .metrics import count_errors, count_block_errors
-from comcloak.supplememt import get_real_dtype
+from comcloak.supplement import get_real_dtype
 from comcloak.mapping import Mapper, Constellation
 import time
+from torch import log2 as _log2
 # from sionna import signal
 
 class BinarySource(nn.Module):
@@ -791,3 +792,14 @@ def sim_ber(mc_fun,
 sim_ber.CALLBACK_CONTINUE = None
 sim_ber.CALLBACK_STOP = 2
 sim_ber.CALLBACK_NEXT_SNR = 1
+
+def log2(x):
+    # pylint: disable=C0301
+    """Pytorch implementation of NumPy's `log2` function.
+
+    Simple extension to `tf.experimental.numpy.log2`
+    which casts the result to the `dtype` of the input.
+    For more details see the `TensorFlow <https://www.tensorflow.org/api_docs/python/tf/experimental/numpy/log2>`_ and `NumPy <https://numpy.org/doc/1.16/reference/generated/numpy.log2.html>`_ documentation.
+    """
+    # return tf.cast(_log2(x), x.dtype)
+    return _log2(x).type(x.dtype)

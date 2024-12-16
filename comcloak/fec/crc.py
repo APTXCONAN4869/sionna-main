@@ -5,11 +5,11 @@
 """Layers for cyclic redundancy checks (CRC) and utility functions"""
 
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras.layers import Layer
-from sionna.fec.utils import int_mod_2
+import torch
+import torch.nn as nn
+from comcloak.fec.utils import int_mod_2
 
-class CRCEncoder(Layer):
+class CRCEncoder(nn.Module):
     """CRCEncoder(crc_degree, output_dtype=tf.float32, **kwargs)
 
     Adds cyclic redundancy check to input sequence.
@@ -62,9 +62,9 @@ class CRCEncoder(Layer):
 
     """
 
-    def __init__(self, crc_degree, dtype=tf.float32, **kwargs):
+    def __init__(self, crc_degree, dtype=torch.float32, **kwargs):
 
-        super().__init__(dtype=dtype, **kwargs)
+        super(CRCEncoder, self).__init__()
 
         assert isinstance(crc_degree, str), "crc_degree must be str"
         self._crc_degree = crc_degree
@@ -74,6 +74,7 @@ class CRCEncoder(Layer):
 
         self._k = None
         self._n = None
+        self.dtype = dtype
 
     #########################################
     # Public methods and properties
@@ -110,35 +111,35 @@ class CRCEncoder(Layer):
 
     def _select_crc_pol(self, crc_degree):
         """Select 5G CRC polynomial according to Sec. 5.1 [3GPPTS38212_CRC]_."""
-        if crc_degree=="CRC24A":
+        if crc_degree == "CRC24A":
             crc_length = 24
             crc_coeffs = [24, 23, 18, 17, 14, 11, 10, 7, 6, 5, 4, 3, 1, 0]
-        elif crc_degree=="CRC24B":
+        elif crc_degree == "CRC24B":
             crc_length = 24
             crc_coeffs = [24, 23, 6, 5, 1, 0]
-        elif crc_degree=="CRC24C":
+        elif crc_degree == "CRC24C":
             crc_length = 24
             crc_coeffs = [24, 23, 21, 20, 17, 15, 13, 12, 8, 4, 2, 1, 0]
-        elif crc_degree=="CRC16":
+        elif crc_degree == "CRC16":
             crc_length = 16
             crc_coeffs = [16, 12, 5, 0]
-        elif crc_degree=="CRC11":
+        elif crc_degree == "CRC11":
             crc_length = 11
             crc_coeffs = [11, 10, 9, 5, 0]
-        elif crc_degree=="CRC6":
+        elif crc_degree == "CRC6":
             crc_length = 6
             crc_coeffs = [6, 5, 0]
         else:
             raise ValueError("Invalid CRC Polynomial")
 
-        crc_pol = np.zeros(crc_length+1)
+        crc_pol = np.zeros(crc_length + 1)
         for c in crc_coeffs:
             crc_pol[c] = 1
 
         # invert array (MSB instead of LSB)
-        crc_pol_inv = np.zeros(crc_length+1)
-        for i in range(crc_length+1):
-            crc_pol_inv[crc_length-i] = crc_pol[i]
+        crc_pol_inv = np.zeros(crc_length + 1)
+        for i in range(crc_length + 1):
+            crc_pol_inv[crc_length - i] = crc_pol[i]
 
         return crc_pol_inv.astype(int), crc_length
 
@@ -163,31 +164,14 @@ class CRCEncoder(Layer):
         for i in range(k):
             # shift by one position
             x_crc = np.concatenate([x_crc, [0]])
-            if x_crc[0]==1:
+            if x_crc[0] == 1:
                 x_crc = np.bitwise_xor(x_crc, pol_crc)
             x_crc = x_crc[1:]
-            g_mat[k-i-1,:] = x_crc
+            g_mat[k - i - 1, :] = x_crc
 
         return g_mat
 
-    #########################
-    # Keras layer functions
-    #########################
-
-    def build(self, input_shape):
-        """Build the generator matrix
-
-        The CRC is always added to the last dimension of the input.
-        """
-        k = input_shape[-1] # we perform the CRC check on the last dimension
-        assert k is not None, "Shape of last dimension cannot be None."
-        g_mat_crc = self._gen_crc_mat(k, self.crc_pol)
-        self._g_mat_crc = tf.constant(g_mat_crc, dtype=tf.float32)
-
-        self._k = k
-        self._n = k + g_mat_crc.shape[1]
-
-    def call(self, inputs):
+    def forward(self, inputs):
         """cyclic redundancy check function.
 
         This function add the CRC parity bits to ``inputs`` and returns the
@@ -206,9 +190,24 @@ class CRCEncoder(Layer):
 
         """
 
-        # assert rank must be two
-        tf.debugging.assert_greater(tf.rank(inputs), 1)
+        """Build the generator matrix
 
+                The CRC is always added to the last dimension of the input.
+                """
+        "Make sure inputs are tensor type"
+        if not torch.is_tensor(inputs):
+            inputs = torch.tensor(inputs)
+
+        k = inputs.shape[-1]  # we perform the CRC check on the last dimension
+        assert k is not None, "Shape of last dimension cannot be None."
+        g_mat_crc = self._gen_crc_mat(k, self.crc_pol)
+        self._g_mat_crc = torch.tensor(g_mat_crc, dtype=torch.float32)
+
+        self._k = k
+        self._n = k + g_mat_crc.shape[1]
+
+        # assert rank must be two
+        assert inputs.ndim > 1, "rank must be two"
         # re-init if shape has changed, update generator matrix
         if inputs.shape[-1] != self._g_mat_crc.shape[0]:
             self.build(inputs.shape)
@@ -217,27 +216,27 @@ class CRCEncoder(Layer):
         # this the generator matrix is non-sparse and a "full" matrix
         # multiplication is probably the fastest implementation.
 
-        x_exp = tf.expand_dims(inputs, axis=-2) # row vector of shape 1xk
+        x_exp = torch.unsqueeze(inputs, dim=-2)  # row vector of shape 1xk
 
         # tf.matmul onl supports floats (and int32 but not uint8 etc.)
-        x_exp32 = tf.cast(x_exp, tf.float32)
-        x_crc = tf.matmul(x_exp32, self._g_mat_crc) # calculate crc bits
+        x_exp32 = x_exp.type(torch.float32)
+        x_crc = torch.matmul(x_exp32, self._g_mat_crc)  # calculate crc bits
 
         # take modulo 2 of x_crc (bitwise operations instead of tf.mod)
 
         # cast to tf.int64 first as TF 2.15 has an XLA bug with casting directly
         # to tf.int32
-        x_crc = tf.cast(x_crc, dtype=tf.int64)
+        x_crc = x_crc.type(torch.int64)
 
         x_crc = int_mod_2(x_crc)
-        x_crc = tf.cast(x_crc, dtype=self.dtype)
+        x_crc = x_crc.type(self.dtype)
 
-        x_conc = tf.concat([x_exp, x_crc], -1)
-        x_out = tf.squeeze(x_conc, axis=-2)
+        x_conc = torch.cat([x_exp, x_crc], -1)
+        x_out = torch.squeeze(x_conc, dim=-2).type(self.dtype)
 
         return x_out
 
-class CRCDecoder(Layer):
+class CRCDecoder(nn.Module):
     """CRCDecoder(crc_encoder, dtype=None, **kwargs)
 
     Allows cyclic redundancy check verification and removes parity-bits.
@@ -288,18 +287,21 @@ class CRCDecoder(Layer):
 
     def __init__(self,
                  crc_encoder,
-                 dtype=tf.float32,
+                 dtype=torch.float32,
                  **kwargs):
+        super(CRCDecoder, self).__init__()
 
         assert isinstance(crc_encoder, CRCEncoder), \
-             "crc_encoder must be an instance of CRCEncoder."
+            "crc_encoder must be an instance of CRCEncoder."
         self._encoder = crc_encoder
 
         # if dtype is None, use same dtype as associated encoder
         if dtype is None:
-            dtype = self._encoder.dtype
+            self.dtype = self._encoder.dtype
+        else:
+            self.dtype = dtype
 
-        super().__init__(dtype=dtype, **kwargs)
+        # super().__init__(dtype=dtype, **kwargs)
 
     #########################################
     # Public methods and properties
@@ -323,7 +325,7 @@ class CRCDecoder(Layer):
         """Nothing to build."""
         pass
 
-    def call(self, inputs):
+    def forward(self, inputs):
         """cyclic redundancy check verification
 
         This function verifies the CRC of ``inputs``. Returns the result of
@@ -345,19 +347,20 @@ class CRCDecoder(Layer):
         """
 
         # assert rank must be two
-        tf.debugging.assert_greater(tf.rank(inputs), 1)
+        assert inputs.ndim > 1, "assert rank must be two"
 
         # last dim must be at least crc_bits long
-        tf.debugging.assert_greater_equal(tf.shape(inputs)[-1],
-                                          self._encoder.crc_length)
+        assert inputs.shape[-1] > self. _encoder.crc_length, "last dim must be at least crc_bits long"
 
         # re-encode information bits of x and verify that CRC bits are correct
 
-        x_info = inputs[...,0:-self._encoder.crc_length]
-        x_parity = self._encoder(inputs)[...,-self._encoder.crc_length:]
+        x_info = inputs[..., 0:-self._encoder.crc_length]
+        x_parity = self._encoder(inputs)[..., -self._encoder.crc_length:]
 
         # return if x fulfils the CRC
-        crc_check = tf.reduce_sum(x_parity, axis=-1, keepdims=True)
-        crc_check = tf.where(crc_check>0, False, True)
+        crc_check = torch.sum(x_parity, dim=-1, keepdim=True)
+        crc_check = torch.where(crc_check > 0, False, True)
+
+        x_info = x_info.type(self.dtype)
 
         return [x_info, crc_check]

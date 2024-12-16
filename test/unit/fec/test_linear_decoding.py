@@ -6,7 +6,7 @@ try:
     import sionna
 except ImportError as e:
     import sys
-    sys.path.append("../")
+    sys.path.append("./")
 from numpy.lib.npyio import load
 
 import unittest

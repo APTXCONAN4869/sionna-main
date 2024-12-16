@@ -3,11 +3,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from comcloak.utils import expand_to_rank
-from comcloak.nr.utils import generate_prng_seq
+from comcloak.fec.utils import generate_prng_seq
+from comcloak.supplement import assert_type
 
 
-def assert_type(tensor, expected_type):
-    assert tensor.dtype == expected_type, f"Expected type {expected_type}, but got {tensor.dtype}"
+
 
 class Scrambler(nn.Module):
     r"""

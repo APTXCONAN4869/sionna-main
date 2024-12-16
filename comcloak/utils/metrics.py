@@ -61,4 +61,25 @@ def count_block_errors(b, b_hat):
     errors = errors.to(torch.int64)
     return errors.sum().item()
 
+def compute_ber(b, b_hat):
+    """Computes the bit error rate (BER) between two binary tensors.
+
+    Input
+    -----
+        b : torch.float32
+            A tensor of arbitrary shape filled with ones and
+            zeros.
+
+        b_hat : torch.float32
+            A tensor of the same shape as ``b`` filled with
+            ones and zeros.
+
+    Output
+    ------
+        : torch.float64
+            A scalar, the BER.
+    """
+    ber = torch.not_equal(b, b_hat)
+    ber = torch.tensor(ber, torch.float64) # torch.float64 to suport large batch-sizes
+    return torch.mean(ber)
 

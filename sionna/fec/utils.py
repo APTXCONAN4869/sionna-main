@@ -1346,7 +1346,6 @@ def generate_reg_ldpc(v, c, n, allow_flex_len=True, verbose=True):
 
     return pcm, k, n, coderate
 
-
 def int_mod_2(x):
     r"""Efficient implementation of modulo 2 operation for integer inputs.
 

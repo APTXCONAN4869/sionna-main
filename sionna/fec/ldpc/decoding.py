@@ -777,7 +777,7 @@ class LDPCBPDecoder(Layer):
         # msg_e = tf.where(msg==LARGE_VAL, min_val_e, min_val)
 
         min_1 = tf.squeeze(tf.gather(min_val, msg.value_rowids()), axis=1)
-        min_e = tf.squeeze(tf.gather(min_val_e, msg.value_rowids()), axis=1)
+        min_e = tf.squeeze(tf.gather(min_val_e, msg.value_rowids()), axis=1)#
         msg_e = tf.ragged.map_flat_values(
                         lambda x: tf.where(x==LARGE_VAL, min_e, min_1),
                         msg)

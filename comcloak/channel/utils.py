@@ -2,7 +2,7 @@ import torch
 import warnings
 import numpy as np
 from comcloak.utils import expand_to_rank
-from comcloak.supplememt import get_real_dtype, gather_pytorch
+from comcloak.supplement import get_real_dtype, gather_pytorch
 from comcloak import PI
 # def gather_pytorch(input_data, indices=None, batch_dims=0, axis=0):
 #     input_data = torch.tensor(input_data)
