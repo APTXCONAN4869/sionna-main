@@ -2,13 +2,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from comcloak.ofdm import RemoveNulledSubcarriers
-from ofdm_test_module_z import Constellation, flatten_dims, split_dim, flatten_last_dims, expand_to_rank
-from sionna.mimo import MaximumLikelihoodDetectorWithPrior as MaximumLikelihoodDetectorWithPrior_
-from sionna.mimo import MaximumLikelihoodDetector as MaximumLikelihoodDetector_
-from sionna.mimo import LinearDetector as LinearDetector_
-from sionna.mimo import KBestDetector as KBestDetector_
-from sionna.mimo import EPDetector as EPDetector_
-from sionna.mimo import MMSEPICDetector as MMSEPICDetector_
+from comcloak.ofdm.ofdm_test_module_z import Constellation, flatten_dims, split_dim, flatten_last_dims, expand_to_rank
+from comcloak.mimo import MaximumLikelihoodDetectorWithPrior as MaximumLikelihoodDetectorWithPrior_
+from comcloak.mimo import MaximumLikelihoodDetector as MaximumLikelihoodDetector_
+from comcloak.mimo import LinearDetector as LinearDetector_
+from comcloak.mimo import KBestDetector as KBestDetector_
+from comcloak.mimo import EPDetector as EPDetector_
+from comcloak.mimo import MMSEPICDetector as MMSEPICDetector_
 
 
 class OFDMDetector(nn.Module):
@@ -212,9 +212,9 @@ class MaximumLikelihoodDetector(OFDMDetector):
     This layer implements maximum-likelihood (ML) detection
     for OFDM MIMO transmissions. Both ML detection of symbols or bits with either
     soft- or hard-decisions are supported. The OFDM and stream configuration are provided
-    by a :class:`~sionna.ofdm.ResourceGrid` and
-    :class:`~sionna.mimo.StreamManagement` instance, respectively. The
-    actual detector is an instance of :class:`~sionna.mimo.MaximumLikelihoodDetector`.
+    by a :class:`~comcloak.ofdm.ResourceGrid` and
+    :class:`~comcloak.mimo.StreamManagement` instance, respectively. The
+    actual detector is an instance of :class:`~comcloak.mimo.MaximumLikelihoodDetector`.
 
     Parameters
     ----------
@@ -227,13 +227,13 @@ class MaximumLikelihoodDetector(OFDMDetector):
         Demapping method used
 
     resource_grid : ResourceGrid
-        Instance of :class:`~sionna.ofdm.ResourceGrid`
+        Instance of :class:`~comcloak.ofdm.ResourceGrid`
 
     stream_management : StreamManagement
-        Instance of :class:`~sionna.mimo.StreamManagement`
+        Instance of :class:`~comcloak.mimo.StreamManagement`
 
     constellation_type : One of ["qam", "pam", "custom"], str
-        For "custom", an instance of :class:`~sionna.mapping.Constellation`
+        For "custom", an instance of :class:`~comcloak.mapping.Constellation`
         must be provided.
 
     num_bits_per_symbol : int
@@ -241,7 +241,7 @@ class MaximumLikelihoodDetector(OFDMDetector):
         Only required for ``constellation_type`` in ["qam", "pam"].
 
     constellation : Constellation
-        Instance of :class:`~sionna.mapping.Constellation` or `None`.
+        Instance of :class:`~comcloak.mapping.Constellation` or `None`.
         In the latter case, ``constellation_type``
         and ``num_bits_per_symbol`` must be provided.
 
@@ -286,8 +286,8 @@ class MaximumLikelihoodDetector(OFDMDetector):
     ----
     If you want to use this layer in Graph mode with XLA, i.e., within
     a function that is decorated with ``@torch.function(jit_compile=True)``,
-    you must set ``sionna.Config.xla_compat=true``.
-    See :py:attr:`~sionna.Config.xla_compat`.
+    you must set ``comcloak.Config.xla_compat=true``.
+    See :py:attr:`~comcloak.Config.xla_compat`.
     """
 
     def __init__(self,
@@ -331,9 +331,9 @@ class MaximumLikelihoodDetectorWithPrior(OFDMDetectorWithPrior):
     for OFDM MIMO transmissions assuming prior knowledge on the transmitted data is available.
     Both ML detection of symbols or bits with either
     soft- or hard-decisions are supported. The OFDM and stream configuration are provided
-    by a :class:`~sionna.ofdm.ResourceGrid` and
-    :class:`~sionna.mimo.StreamManagement` instance, respectively. The
-    actual detector is an instance of :class:`~sionna.mimo.MaximumLikelihoodDetectorWithPrior`.
+    by a :class:`~comcloak.ofdm.ResourceGrid` and
+    :class:`~comcloak.mimo.StreamManagement` instance, respectively. The
+    actual detector is an instance of :class:`~comcloak.mimo.MaximumLikelihoodDetectorWithPrior`.
 
     Parameters
     ----------
@@ -346,13 +346,13 @@ class MaximumLikelihoodDetectorWithPrior(OFDMDetectorWithPrior):
         Demapping method used
 
     resource_grid : ResourceGrid
-        Instance of :class:`~sionna.ofdm.ResourceGrid`
+        Instance of :class:`~comcloak.ofdm.ResourceGrid`
 
     stream_management : StreamManagement
-        Instance of :class:`~sionna.mimo.StreamManagement`
+        Instance of :class:`~comcloak.mimo.StreamManagement`
 
     constellation_type : One of ["qam", "pam", "custom"], str
-        For "custom", an instance of :class:`~sionna.mapping.Constellation`
+        For "custom", an instance of :class:`~comcloak.mapping.Constellation`
         must be provided.
 
     num_bits_per_symbol : int
@@ -360,7 +360,7 @@ class MaximumLikelihoodDetectorWithPrior(OFDMDetectorWithPrior):
         Only required for ``constellation_type`` in ["qam", "pam"].
 
     constellation : Constellation
-        Instance of :class:`~sionna.mapping.Constellation` or `None`.
+        Instance of :class:`~comcloak.mapping.Constellation` or `None`.
         In the latter case, ``constellation_type``
         and ``num_bits_per_symbol`` must be provided.
 
@@ -410,8 +410,8 @@ class MaximumLikelihoodDetectorWithPrior(OFDMDetectorWithPrior):
     ----
     If you want to use this layer in Graph mode with XLA, i.e., within
     a function that is decorated with ``@torch.function(jit_compile=True)``,
-    you must set ``sionna.Config.xla_compat=true``.
-    See :py:attr:`~sionna.Config.xla_compat`.
+    you must set ``comcloak.Config.xla_compat=true``.
+    See :py:attr:`~comcloak.Config.xla_compat`.
     """
 
     def __init__(self,
@@ -451,21 +451,21 @@ class LinearDetector(OFDMDetector):
     # pylint: disable=line-too-long
     r"""LinearDetector(equalizer, output, demapping_method, resource_grid, stream_management, constellation_type=None, num_bits_per_symbol=None, constellation=None, hard_out=False, dtype=torch.complex64, **kwargs)
 
-    This layer wraps a MIMO linear equalizer and a :class:`~sionna.mapping.Demapper`
+    This layer wraps a MIMO linear equalizer and a :class:`~comcloak.mapping.Demapper`
     for use with the OFDM waveform.
 
     Both detection of symbols or bits with either
     soft- or hard-decisions are supported. The OFDM and stream configuration are provided
-    by a :class:`~sionna.ofdm.ResourceGrid` and
-    :class:`~sionna.mimo.StreamManagement` instance, respectively. The
-    actual detector is an instance of :class:`~sionna.mimo.LinearDetector`.
+    by a :class:`~comcloak.ofdm.ResourceGrid` and
+    :class:`~comcloak.mimo.StreamManagement` instance, respectively. The
+    actual detector is an instance of :class:`~comcloak.mimo.LinearDetector`.
 
     Parameters
     ----------
     equalizer : str, one of ["lmmse", "zf", "mf"], or an equalizer function
         Equalizer to be used. Either one of the existing equalizers, e.g.,
-        :func:`~sionna.mimo.lmmse_equalizer`, :func:`~sionna.mimo.zf_equalizer`, or
-        :func:`~sionna.mimo.mf_equalizer` can be used, or a custom equalizer
+        :func:`~comcloak.mimo.lmmse_equalizer`, :func:`~comcloak.mimo.zf_equalizer`, or
+        :func:`~comcloak.mimo.mf_equalizer` can be used, or a custom equalizer
         function provided that has the same input/output specification.
 
     output : One of ["bit", "symbol"], str
@@ -477,13 +477,13 @@ class LinearDetector(OFDMDetector):
         Demapping method used
 
     resource_grid : ResourceGrid
-        Instance of :class:`~sionna.ofdm.ResourceGrid`
+        Instance of :class:`~comcloak.ofdm.ResourceGrid`
 
     stream_management : StreamManagement
-        Instance of :class:`~sionna.mimo.StreamManagement`
+        Instance of :class:`~comcloak.mimo.StreamManagement`
 
     constellation_type : One of ["qam", "pam", "custom"], str
-        For "custom", an instance of :class:`~sionna.mapping.Constellation`
+        For "custom", an instance of :class:`~comcloak.mapping.Constellation`
         must be provided.
 
     num_bits_per_symbol : int
@@ -491,7 +491,7 @@ class LinearDetector(OFDMDetector):
         Only required for ``constellation_type`` in ["qam", "pam"].
 
     constellation : Constellation
-        Instance of :class:`~sionna.mapping.Constellation` or `None`.
+        Instance of :class:`~comcloak.mapping.Constellation` or `None`.
         In the latter case, ``constellation_type``
         and ``num_bits_per_symbol`` must be provided.
 
@@ -536,8 +536,8 @@ class LinearDetector(OFDMDetector):
     ----
     If you want to use this layer in Graph mode with XLA, i.e., within
     a function that is decorated with ``@torch.function(jit_compile=True)``,
-    you must set ``sionna.Config.xla_compat=true``.
-    See :py:attr:`~sionna.Config.xla_compat`.
+    you must set ``comcloak.Config.xla_compat=true``.
+    See :py:attr:`~comcloak.Config.xla_compat`.
     """
 
     def __init__(self,
@@ -579,9 +579,9 @@ class KBestDetector(OFDMDetector):
 
     Both detection of symbols or bits with either
     soft- or hard-decisions are supported. The OFDM and stream configuration are provided
-    by a :class:`~sionna.ofdm.ResourceGrid` and
-    :class:`~sionna.mimo.StreamManagement` instance, respectively. The
-    actual detector is an instance of :class:`~sionna.mimo.KBestDetector`.
+    by a :class:`~comcloak.ofdm.ResourceGrid` and
+    :class:`~comcloak.mimo.StreamManagement` instance, respectively. The
+    actual detector is an instance of :class:`~comcloak.mimo.KBestDetector`.
 
     Parameters
     ----------
@@ -599,13 +599,13 @@ class KBestDetector(OFDMDetector):
         streams.
 
     resource_grid : ResourceGrid
-        Instance of :class:`~sionna.ofdm.ResourceGrid`
+        Instance of :class:`~comcloak.ofdm.ResourceGrid`
 
     stream_management : StreamManagement
-        Instance of :class:`~sionna.mimo.StreamManagement`
+        Instance of :class:`~comcloak.mimo.StreamManagement`
 
     constellation_type : One of ["qam", "pam", "custom"], str
-        For "custom", an instance of :class:`~sionna.mapping.Constellation`
+        For "custom", an instance of :class:`~comcloak.mapping.Constellation`
         must be provided.
 
     num_bits_per_symbol : int
@@ -613,7 +613,7 @@ class KBestDetector(OFDMDetector):
         Only required for ``constellation_type`` in ["qam", "pam"].
 
     constellation : Constellation
-        Instance of :class:`~sionna.mapping.Constellation` or `None`.
+        Instance of :class:`~comcloak.mapping.Constellation` or `None`.
         In the latter case, ``constellation_type``
         and ``num_bits_per_symbol`` must be provided.
 
@@ -627,9 +627,9 @@ class KBestDetector(OFDMDetector):
         of the channel. Note that this only works with a QAM constellation.
         Defaults to `False`.
 
-    list2llr: `None` or instance of :class:`~sionna.mimo.List2LLR`
+    list2llr: `None` or instance of :class:`~comcloak.mimo.List2LLR`
         The function to be used to compute LLRs from a list of candidate solutions.
-        If `None`, the default solution :class:`~sionna.mimo.List2LLRSimple`
+        If `None`, the default solution :class:`~comcloak.mimo.List2LLRSimple`
         is used.
 
     dtype : One of [torch.complex64, torch.complex128] torch.DType (dtype)
@@ -668,8 +668,8 @@ class KBestDetector(OFDMDetector):
     ----
     If you want to use this layer in Graph mode with XLA, i.e., within
     a function that is decorated with ``@torch.function(jit_compile=True)``,
-    you must set ``sionna.Config.xla_compat=true``.
-    See :py:attr:`~sionna.Config.xla_compat`.
+    you must set ``comcloak.Config.xla_compat=true``.
+    See :py:attr:`~comcloak.Config.xla_compat`.
     """
 
     def __init__(self,
@@ -715,9 +715,9 @@ class EPDetector(OFDMDetector):
 
     Both detection of symbols or bits with either
     soft- or hard-decisions are supported. The OFDM and stream configuration are provided
-    by a :class:`~sionna.ofdm.ResourceGrid` and
-    :class:`~sionna.mimo.StreamManagement` instance, respectively. The
-    actual detector is an instance of :class:`~sionna.mimo.EPDetector`.
+    by a :class:`~comcloak.ofdm.ResourceGrid` and
+    :class:`~comcloak.mimo.StreamManagement` instance, respectively. The
+    actual detector is an instance of :class:`~comcloak.mimo.EPDetector`.
 
     Parameters
     ----------
@@ -727,10 +727,10 @@ class EPDetector(OFDMDetector):
         ``hard_out`` flag.
 
     resource_grid : ResourceGrid
-        Instance of :class:`~sionna.ofdm.ResourceGrid`
+        Instance of :class:`~comcloak.ofdm.ResourceGrid`
 
     stream_management : StreamManagement
-        Instance of :class:`~sionna.mimo.StreamManagement`
+        Instance of :class:`~comcloak.mimo.StreamManagement`
 
     num_bits_per_symbol : int
         Number of bits per constellation symbol, e.g., 4 for QAM16.
@@ -787,8 +787,8 @@ class EPDetector(OFDMDetector):
     mode with XLA, i.e., within a function that is decorated with
     ``@torch.function(jit_compile=True)``.
     However, it is possible to do so by setting
-    ``sionna.Config.xla_compat=true``.
-    See :py:attr:`~sionna.Config.xla_compat`.
+    ``comcloak.Config.xla_compat=true``.
+    See :py:attr:`~comcloak.Config.xla_compat`.
     """
     def __init__(self,
                  output,
@@ -825,9 +825,9 @@ class MMSEPICDetector(OFDMDetectorWithPrior):
 
     Both detection of symbols or bits with either
     soft- or hard-decisions are supported. The OFDM and stream configuration are provided
-    by a :class:`~sionna.ofdm.ResourceGrid` and
-    :class:`~sionna.mimo.StreamManagement` instance, respectively. The
-    actual detector is an instance of :class:`~sionna.mimo.MMSEPICDetector`.
+    by a :class:`~comcloak.ofdm.ResourceGrid` and
+    :class:`~comcloak.mimo.StreamManagement` instance, respectively. The
+    actual detector is an instance of :class:`~comcloak.mimo.MMSEPICDetector`.
 
     Parameters
     ----------
@@ -837,10 +837,10 @@ class MMSEPICDetector(OFDMDetectorWithPrior):
         ``hard_out`` flag.
 
     resource_grid : ResourceGrid
-        Instance of :class:`~sionna.ofdm.ResourceGrid`
+        Instance of :class:`~comcloak.ofdm.ResourceGrid`
 
     stream_management : StreamManagement
-        Instance of :class:`~sionna.mimo.StreamManagement`
+        Instance of :class:`~comcloak.mimo.StreamManagement`
 
     demapping_method : One of ["app", "maxlog"], str
         The demapping method used.
@@ -851,7 +851,7 @@ class MMSEPICDetector(OFDMDetectorWithPrior):
         Defaults to 1.
 
     constellation_type : One of ["qam", "pam", "custom"], str
-        For "custom", an instance of :class:`~sionna.mapping.Constellation`
+        For "custom", an instance of :class:`~comcloak.mapping.Constellation`
         must be provided.
 
     num_bits_per_symbol : int
@@ -859,7 +859,7 @@ class MMSEPICDetector(OFDMDetectorWithPrior):
         Only required for ``constellation_type`` in ["qam", "pam"].
 
     constellation : Constellation
-        An instance of :class:`~sionna.mapping.Constellation` or `None`.
+        An instance of :class:`~comcloak.mapping.Constellation` or `None`.
         In the latter case, ``constellation_type``
         and ``num_bits_per_symbol`` must be provided.
 
@@ -912,8 +912,8 @@ class MMSEPICDetector(OFDMDetectorWithPrior):
     mode with XLA, i.e., within a function that is decorated with
     ``@torch.function(jit_compile=True)``.
     However, it is possible to do so by setting
-    ``sionna.Config.xla_compat=true``.
-    See :py:attr:`~sionna.Config.xla_compat`.
+    ``comcloak.Config.xla_compat=true``.
+    See :py:attr:`~comcloak.Config.xla_compat`.
     """
     def __init__(self,
                  output,

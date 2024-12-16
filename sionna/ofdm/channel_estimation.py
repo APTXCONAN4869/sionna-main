@@ -703,7 +703,7 @@ class LinearInterpolator(BaseChannelInterpolator):
         # np.save('tftensor.npy', inputs.numpy())
         y0 = tf.gather(inputs, y0_ind, axis=2, batch_dims=2)
         y1 = tf.gather(inputs, y1_ind, axis=2, batch_dims=2)
-        print('inputs:\n',tf.where(inputs != 0))
+        # print('inputs:\n',tf.where(inputs != 0))
         # print("y0:\n", tf.boolean_mask(y0, y0 != 0 + 0j))
         # print("y0_ind:\n", tf.boolean_mask(y0_ind, y0_ind != 0 + 0j))
         # print("inputs:\n", tf.boolean_mask(inputs, inputs != 0 + 0j))
@@ -725,12 +725,12 @@ class LinearInterpolator(BaseChannelInterpolator):
         # Pad the inputs with a leading 0.
         # All undefined channel estimates will get this value.
         # print("output:\n", tf.boolean_mask(inputs, inputs != 0 + 0j))
-        print(self._pad)
+        # print(self._pad)
         inputs = tf.pad(inputs, self._pad, constant_values=0)
         # print("output:\n", tf.boolean_mask(inputs, inputs != 0 + 0j))
         # Transpose inputs to bring batch_dims for gather last. New shape:
         # [num_tx, num_streams_per_tx, 1+num_pilots, k, l, m]
-        print('inputs:\n',tf.where(inputs != 0))
+        # print('inputs:\n',tf.where(inputs != 0))
         inputs = tf.transpose(inputs, self._perm_fwd_freq)
 
         # print("output:\n", tf.boolean_mask(inputs, inputs != 0 + 0j))

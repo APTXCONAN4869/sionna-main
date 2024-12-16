@@ -6,7 +6,7 @@ try:
     import sionna
 except ImportError as e:
     import sys
-    sys.path.append("../")
+    sys.path.append("./")
 import tensorflow as tf
 gpus = tf.config.list_physical_devices('GPU')
 print('Number of GPUs available :', len(gpus))

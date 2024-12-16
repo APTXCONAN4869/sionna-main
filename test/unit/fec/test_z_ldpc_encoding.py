@@ -2,29 +2,28 @@
 # SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
+import os
+print("Current directory:", os.getcwd())
 try:
-    import sionna
+    import comcloak
 except ImportError as e:
     import sys
     sys.path.append("./")
-
 import unittest
 import numpy as np
-from os import walk # to load generator matrices from files
-import re # regular expressions for generator matrix filenames
-import tensorflow as tf
-gpus = tf.config.list_physical_devices('GPU')
-print('Number of GPUs available :', len(gpus))
-if gpus:
-    gpu_num = 0 # Number of the GPU to be used
-    try:
-        tf.config.set_visible_devices(gpus[gpu_num], 'GPU')
-        print('Only GPU number', gpu_num, 'used.')
-        tf.config.experimental.set_memory_growth(gpus[gpu_num], True)
-    except RuntimeError as e:
-        print(e)
-from sionna.fec.ldpc.encoding import LDPC5GEncoder
-from sionna.utils import BinarySource
+import torch
+# GPU configuration
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print('Number of GPUs available :', torch.cuda.device_count())
+if torch.cuda.is_available():
+    gpu_num = 0  # Number of the GPU to be used
+    print('Only GPU number', gpu_num, 'used.')
+
+import unittest
+from os import walk  # to load generator matrices from files
+import re  # regular expressions for generator matrix filenames
+from comcloak.fec.ldpc.encoding import LDPC5GEncoder
+from comcloak.utils import BinarySource
 
 class TestLDPC5GEncoder(unittest.TestCase):
     """Testcases for the LDPC5GEncoder."""
@@ -33,7 +32,7 @@ class TestLDPC5GEncoder(unittest.TestCase):
         """Test against invalid values of n and k."""
 
         param_invalid = [[-1, 10],[10,-3],["a", 10],[3, "10"],[10,9],
-                         [8500,10000],[5000, 30000]] # (k,n)
+                         [8500,10000],[5000, 30000]]  # (k,n)
         for p in param_invalid:
             with self.assertRaises(BaseException):
                 LDPC5GEncoder(p[0],p[1])
@@ -41,7 +40,7 @@ class TestLDPC5GEncoder(unittest.TestCase):
         param_valid = [[12, 20],[12,30],[1000, 1566],[364, 1013], [948, 1024],
                        [36,100], [12,18],[8448,10000]] # (k,n)
         for p in param_valid:
-            LDPC5GEncoder(p[0],p[1])
+            LDPC5GEncoder(p[0], p[1])
 
     def test_output_dim(self):
         """ This test combines multiple checks to avoid unnecessary rebuilds of the graph during testing.
@@ -62,11 +61,11 @@ class TestLDPC5GEncoder(unittest.TestCase):
             for r in rs:
                 n = int(k/r)
                 if k>3840 and r<1/3:
-                    continue # range is officially not supported
+                    continue  # range is officially not supported
                 enc = LDPC5GEncoder(k, n)
 
                 # a) Test for correct dimensions
-                u = tf.zeros([bs, k])
+                u = torch.zeros([bs, k])
                 c = enc(u).numpy()
                 self.assertTrue(c.shape[-1]==n)
 
@@ -77,10 +76,23 @@ class TestLDPC5GEncoder(unittest.TestCase):
                 # c) Test that systematic part (excluding first 2z pos) is
                 # valid
                 z = enc._z # access private attribute
-                u = tf.cast(tf.random.uniform([bs, k],
-                                            0,
-                                            2,
-                                            tf.int32), tf.float32)
+                # u = torch.cast(tf.random.uniform([bs, k],
+                #                             0,
+                #                             2,
+                #                             torch.int32), torch.float32)
+                # u = torch.empty((bs, k), dtype=torch.int32).uniform_(0, 2).type(torch.float32)
+                u = torch.randint(0, 2, size=(bs, k)).type(torch.float32)
+                # u = torch.tensor([[0., 0., 1., 0., 0., 0., 1., 1., 0., 1., 1., 0.],
+                #                  [0., 1., 0., 0., 1., 0., 0., 1., 1., 1., 1., 1.],
+                #                  [1., 1., 1., 1., 1., 0., 1., 0., 0., 1., 1., 1.],
+                #                  [0., 1., 1., 0., 1., 1., 1., 0., 0., 0., 1., 0.],
+                #                  [1., 0., 1., 0., 0., 0., 1., 0., 1., 0., 1., 0.],
+                #                  [0., 1., 0., 0., 1., 1., 0., 1., 1., 1., 0., 0.],
+                #                  [0., 0., 1., 0., 0., 1., 0., 0., 1., 0., 1., 1.],
+                #                  [1., 1., 0., 1., 0., 0., 1., 0., 1., 0., 0., 0.],
+                #                  [0., 0., 0., 1., 1., 0., 1., 0., 0., 0., 1., 0.],
+                #                  [1., 1., 0., 1., 0., 1., 0., 0., 1., 0., 1., 0.]])
+
                 c = enc(u).numpy()
                 self.assertTrue(np.array_equal(u[:,2*z:],c[:,:k-2*z]))
 
@@ -95,14 +107,16 @@ class TestLDPC5GEncoder(unittest.TestCase):
         enc = LDPC5GEncoder(k, n)
         # test wrong datatype
         with self.assertRaises(TypeError):
-            enc(tf.constant(u, dtype=tf.complex64))
+            enc((torch.tensor(u)).type(torch.complex64))
+            # enc(torch.constant(u, dtype=torch.complex64))
         with self.assertRaises(TypeError):
-            enc(tf.constant(u, dtype=tf.int32))
+            enc((torch.tensor(u)).type(torch.int32))
+            # enc(torch.constant(u, dtype=torch.int32))
 
         # test for non-binary input
         u[13,37] = 2 # add single invalid number
         with self.assertRaises(BaseException):
-            x = enc(tf.constant(u, dtype=tf.float32))
+            x = enc(torch.constant(u, dtype=torch.float32))
 
     def test_dim_mismatch(self):
         """Test that error raises if input_shape does not match k"""
@@ -112,7 +126,7 @@ class TestLDPC5GEncoder(unittest.TestCase):
         enc = LDPC5GEncoder(k+1, n)
         # test for non-binary input
         with self.assertRaises(BaseException):
-            x = enc(tf.zeros([bs, k]))
+            x = enc(torch.zeros([bs, k]))
 
     def test_example_matrices(self):
         """test against reference matrices.
@@ -158,10 +172,10 @@ class TestLDPC5GEncoder(unittest.TestCase):
 
             # direct encoding
             # add dim for matrix/vect. mult.
-            c_ref = tf.linalg.matmul(tf.expand_dims(u, axis=1), gm)
+            c_ref = torch.linalg.matmul(torch.expand_dims(u, axis=1), gm)
 
-            c_ref = tf.math.mod(c_ref, 2)
-            c_ref = tf.squeeze(c_ref) # remove new dim
+            c_ref = torch.math.mod(c_ref, 2)
+            c_ref = torch.squeeze(c_ref) # remove new dim
             c = c.numpy()
             c_ref = c_ref.numpy()
             print("Testing for k={}, n={}".format(k, n))
@@ -179,47 +193,51 @@ class TestLDPC5GEncoder(unittest.TestCase):
         for s in shapes:
             source = BinarySource()
             u = source(s)
-            u_ref = tf.reshape(u, [-1, k])
+            u_ref = torch.reshape(u, [-1, k])
 
             c = enc(u)
             c_ref = enc(u_ref)
             s[-1] = n
-            c_ref = tf.reshape(c_ref, s)
+            c_ref = torch.reshape(c_ref, s)
             self.assertTrue(np.array_equal(c.numpy(), c_ref.numpy()))
 
         # and verify that wrong last dimension raises an error
-        with self.assertRaises(tf.errors.InvalidArgumentError):
+        with self.assertRaises(RuntimeError):
             s = [10, 2, k-1]
             u = source(s)
             x = enc(u)
 
-    def test_keras(self):
-        """Test that Keras model can be compiled (supports dynamic shapes)."""
+    def test_dynamic_shapes(self):
+        """Test that model can be compiled (supports dynamic shapes)."""
         bs = 10
         k = 100
         n = 200
         source = BinarySource()
 
-        inputs = tf.keras.Input(shape=(k), dtype=tf.float32)
-        x = LDPC5GEncoder(k, n)(inputs)
-        model = tf.keras.Model(inputs=inputs, outputs=x)
+        # inputs = torch.keras.Input(shape=k, dtype=torch.float32)
+        # inputs = torch.empty((1, k), dtype=torch.float32)
+        # print("INputs size:", inputs.size())
+        # print("Inputs: ", inputs)
+        # x = LDPC5GEncoder(k, n)(inputs)
+        # model = torch.keras.Model(inputs=inputs, outputs=x)
+        model = LDPC5GEncoder(k,n)
 
         b = source([bs, k])
         model(b)
         # call twice to see that bs can change
         b2 = source([bs+1, k])
         model(b2)
-        model.summary()
+        # model.summary()
 
-    def test_tf_fun(self):
-        """Test that tf.function works as expected and XLA is supported"""
+    def test_torch_fun(self):
+        """Test that torch.function works as expected and XLA is supported"""
 
-        @tf.function
+        # @torch.function
         def run_graph(u):
             c = enc(u)
             return c
 
-        @tf.function(jit_compile=True)
+        # @torch.function(jit_compile=True)
         def run_graph_xla(u):
             c = enc(u)
             return c
@@ -238,27 +256,32 @@ class TestLDPC5GEncoder(unittest.TestCase):
         """Test that encoder supports variable dtypes and
         yields same result."""
 
-        dt_supported = (tf.float16, tf.float32, tf.float64, tf.int8,
-            tf.int32, tf.int64, tf.uint8, tf.uint16, tf.uint32)
+        dt_supported = (torch.float16, torch.float32, torch.float64, torch.int8,
+            torch.int32, torch.int64, torch.uint8, torch.uint16, torch.uint32)
 
         bs = 10
         k = 100
         n = 200
 
         source = BinarySource()
-        enc_ref = LDPC5GEncoder(k, n, dtype=tf.float32)
+        enc_ref = LDPC5GEncoder(k, n, dtype=torch.float32)
 
         u = source([bs, k])
+        # print("U: ", u)
         c_ref = enc_ref(u)
-
+        i=0
+        # print("iteration: Start")
         for dt in dt_supported:
             enc = LDPC5GEncoder(k, n, dtype=dt)
-            u_dt = tf.cast(u, dt)
+            # u_dt = torch.cast(u, dt)
+            u_dt = u.type(dt)
             c = enc(u_dt)
 
-            c_32 = tf.cast(c, tf.float32)
-
+            # c_32 = torch.cast(c, torch.float32)
+            c_32 = c.type(torch.float32)
             self.assertTrue(np.array_equal(c_ref.numpy(), c_32.numpy()))
+            i=i+1
+            # print("iteration: ",i)
 
     def test_ldpc_interleaver(self):
         """Test that LDPC output interleaver pattern is correct."""

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 from torch import log10
-from comcloak.channel.utils import deg_2_rad,wrap_angle_0_360
+from comcloak.channel.utils import deg_2_rad, wrap_angle_0_360
 
 def gather_pytorch(input_data, indices=None, batch_dims=0, dim=0):
     input_data = torch.tensor(input_data)
