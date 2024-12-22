@@ -528,7 +528,11 @@ class LDPCBPDecoder(nn.Module):
         # aggregate all incoming messages per node
         # x = tf.reduce_sum(msg, axis=1)
         x = msg.reduce_sum()
-        x = torch.add(x, torch.tensor(llr_ch))
+
+        if not isinstance(llr_ch, torch.Tensor):
+            llr_ch = torch.tensor(llr_ch)
+
+        x = torch.add(x, llr_ch)
 
         # TF2.9 does not support XLA for the addition of ragged tensors
         # the following code provides a workaround that supports XLA

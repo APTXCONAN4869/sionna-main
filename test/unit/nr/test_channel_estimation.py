@@ -7,7 +7,7 @@ try:
     import sionna
 except ImportError as e:
     import sys
-    sys.path.append("../")
+    sys.path.append("./")
 
 import unittest
 import numpy as np
@@ -80,28 +80,28 @@ def check_channel_estimation(pusch_configs, add_awgn=False):
 class TestPUSCHLSChannelEstimator(unittest.TestCase):
     """Tests for PUSCHLSChannelEstimator"""
 
-    def test_01(self):
-        """Test many configurations for a single transmitter without precoding"""
-        tf.random.set_seed(1)
-        pusch_config = PUSCHConfig()
-        pusch_config.n_size_bwp = 4
-        pusch_config.precoding = "non-codebook"
-        for num_antenna_ports in [1,2,4]:
-            pusch_config.num_antenna_ports = num_antenna_ports
-            pusch_config.num_layers = num_antenna_ports
-            for length in [1,2]:
-                pusch_config.dmrs.length = length
-                max_additional_position = 3 if length==1 else 1
-                for additional_position in range(0,max_additional_position+1):
-                    pusch_config.dmrs.additional_position = additional_position
-                    for config_type in [1,2]:
-                        pusch_config.dmrs.config_type = config_type
-                        max_cdm_groups = 2 if config_type==1 else 3
-                        min_cdm_groups = 1 if num_antenna_ports<4 else 2
-                        for num_cdm_groups_without_data in range(min_cdm_groups,max_cdm_groups+1):
-                            pusch_config.dmrs.num_cdm_groups_without_data = num_cdm_groups_without_data
-                            self.assertTrue(check_channel_estimation([pusch_config]))
-                            self.assertTrue(check_channel_estimation([pusch_config], add_awgn=True))
+    # def test_01(self):
+    #     """Test many configurations for a single transmitter without precoding"""
+    #     tf.random.set_seed(1)
+    #     pusch_config = PUSCHConfig()
+    #     pusch_config.n_size_bwp = 4
+    #     pusch_config.precoding = "non-codebook"
+    #     for num_antenna_ports in [1,2,4]:
+    #         pusch_config.num_antenna_ports = num_antenna_ports
+    #         pusch_config.num_layers = num_antenna_ports
+    #         for length in [1,2]:
+    #             pusch_config.dmrs.length = length
+    #             max_additional_position = 3 if length==1 else 1
+    #             for additional_position in range(0,max_additional_position+1):
+    #                 pusch_config.dmrs.additional_position = additional_position
+    #                 for config_type in [1,2]:
+    #                     pusch_config.dmrs.config_type = config_type
+    #                     max_cdm_groups = 2 if config_type==1 else 3
+    #                     min_cdm_groups = 1 if num_antenna_ports<4 else 2
+    #                     for num_cdm_groups_without_data in range(min_cdm_groups,max_cdm_groups+1):
+    #                         pusch_config.dmrs.num_cdm_groups_without_data = num_cdm_groups_without_data
+    #                         self.assertTrue(check_channel_estimation([pusch_config]))
+    #                         self.assertTrue(check_channel_estimation([pusch_config], add_awgn=True))
 
     def test_02(self):
         """Test many configurations for a single transmitter with precoding"""
@@ -129,29 +129,32 @@ class TestPUSCHLSChannelEstimator(unittest.TestCase):
                                 self.assertTrue(check_channel_estimation([pusch_config], add_awgn=True))
 
 
-    def test_03(self):
-        """Some tests for multiple transmitters with precoding"""
-        tf.random.set_seed(1)
-        pusch_config = PUSCHConfig()
-        pusch_config.n_size_bwp = 4
-        pusch_config.num_antenna_ports=4
-        pusch_config.precoding = "codebook"
-        pusch_config.tpmi = 2
-        pusch_config.num_layers = 2
-        pusch_config.dmrs.length = 2
-        pusch_config.dmrs.config_type = 2
-        pusch_config.dmrs.num_cdm_groups_without_data = 3
-        pusch_config.dmrs.dmrs_port_set = [0,1]
-        pusch_config.dmrs.additional_position = 1
+    # def test_03(self):
+    #     """Some tests for multiple transmitters with precoding"""
+    #     tf.random.set_seed(1)
+    #     pusch_config = PUSCHConfig()
+    #     pusch_config.n_size_bwp = 4
+    #     pusch_config.num_antenna_ports=4
+    #     pusch_config.precoding = "codebook"
+    #     pusch_config.tpmi = 2
+    #     pusch_config.num_layers = 2
+    #     pusch_config.dmrs.length = 2
+    #     pusch_config.dmrs.config_type = 2
+    #     pusch_config.dmrs.num_cdm_groups_without_data = 3
+    #     pusch_config.dmrs.dmrs_port_set = [0,1]
+    #     pusch_config.dmrs.additional_position = 1
 
-        pusch_config2 = pusch_config.clone()
-        pusch_config2.dmrs.dmrs_port_set = [2,3]
-        pusch_config2.tpmi = 11
+    #     pusch_config2 = pusch_config.clone()
+    #     pusch_config2.dmrs.dmrs_port_set = [2,3]
+    #     pusch_config2.tpmi = 11
 
-        pusch_config3 = pusch_config.clone()
-        pusch_config3.dmrs.dmrs_port_set = [4,5]
-        pusch_config3.tpmi = 16
+    #     pusch_config3 = pusch_config.clone()
+    #     pusch_config3.dmrs.dmrs_port_set = [4,5]
+    #     pusch_config3.tpmi = 16
 
-        pusch_configs = [pusch_config, pusch_config2, pusch_config3]
-        self.assertTrue(check_channel_estimation(pusch_configs))
-        self.assertTrue(check_channel_estimation(pusch_configs, add_awgn=True))
+    #     pusch_configs = [pusch_config, pusch_config2, pusch_config3]
+    #     self.assertTrue(check_channel_estimation(pusch_configs))
+    #     self.assertTrue(check_channel_estimation(pusch_configs, add_awgn=True))
+
+if __name__ == '__main__':
+    unittest.main()

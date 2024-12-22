@@ -7,7 +7,7 @@ try:
     import sionna
 except ImportError as e:
     import sys
-    sys.path.append("../")
+    sys.path.append("./")
 
 import unittest
 import numpy as np
@@ -74,5 +74,8 @@ class TestPUSCHTransmitter(unittest.TestCase):
     def tests_against_reference(self):
         """Test PUSCHTransmitter output against reference"""
         for i in range(0,83):
-            test_name = f"unit/nr/pusch_test_configs/test_{i}"
+            test_name = f"test/unit/nr/pusch_test_configs/test_{i}"
             self.assertTrue(run_test(test_name))
+
+if __name__ == '__main__':
+    unittest.main()

@@ -122,9 +122,9 @@ class BaseChannelEstimator(ABC, Layer):
         # print('is_binary:\n', is_binary)
         # print('mask:\n', mask)
         pilot_ind = tf.argsort(mask, axis=-1, direction="DESCENDING")
-        print('pilot_ind:\n', pilot_ind[0])
+        # print('pilot_ind:\n', pilot_ind[0])
         # print('mask:\n', mask[0])
-        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', pilot_ind.numpy())
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', pilot_ind.numpy())
         
         self._pilot_ind = pilot_ind[...,:num_pilot_symbols]
 

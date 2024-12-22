@@ -141,7 +141,7 @@ class BaseChannelEstimator(ABC, nn.Module):
         # print('mask:\n', mask_with_offset)
         # pilot_ind = torch.argsort(mask, dim=-1, descending=True)
 
-        indices = torch.arange(mask.shape[-1])
+        # indices = torch.arange(mask.shape[-1])
 
         flattened_tensor = mask.view(-1, mask.shape[-1])
         pilot_ind = torch.stack([
@@ -157,8 +157,8 @@ class BaseChannelEstimator(ABC, nn.Module):
         #     for j in range(mask.shape[1])
         # ]).reshape(mask.shape)
 
-        print('pilot_ind:\n', pilot_ind[0])
-        print('mask:\n', mask[0])
+        # print('pilot_ind:\n', pilot_ind[0])
+        # print('mask:\n', mask[0])
         # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', pilot_ind.numpy())
         self._pilot_ind = pilot_ind[..., :num_pilot_symbols]
 
@@ -453,7 +453,7 @@ class NearestNeighborInterpolator(BaseChannelInterpolator):
 
         # Reshape the pilots to shape [-1, num_pilot_symbols]
         pilots = pilot_pattern.pilots
-        pilots = np.reshape(pilots, [-1] + [pilots.shape[-1]])
+        pilots = np.reshape(pilots, [-1] + [pilots.shape[-1]]).numpy() 
 
         max_num_zero_pilots = np.max(np.sum(np.abs(pilots)==0, -1))
         assert max_num_zero_pilots<pilots.shape[-1],\
@@ -483,7 +483,7 @@ class NearestNeighborInterpolator(BaseChannelInterpolator):
         # Reshape to the original shape of the mask, i.e.:
         # [num_tx, num_streams_per_tx, num_ofdm_symbols,...
         #  ..., num_effective_subcarriers]
-        self._gather_ind = torch.reshape(gather_ind, mask_shape)
+        self._gather_ind = torch.reshape(torch.tensor(gather_ind), mask_shape)
 
     def _interpolate(self, inputs):
         # inputs has shape:
@@ -491,8 +491,8 @@ class NearestNeighborInterpolator(BaseChannelInterpolator):
 
         # Transpose inputs to bring batch_dims for gather last. New shape:
         # [num_tx, num_streams_per_tx, num_pilots, k, l, m]
-        perm = torch.roll(torch.range(inputs.dim()), -3, 0)
-        inputs = inputs.permute(perm)
+        perm = torch.roll(torch.arange(inputs.dim()), -3, 0)
+        inputs = inputs.permute(tuple(perm))
 
         # Interpolate through gather. Shape:
         # [num_tx, num_streams_per_tx, num_ofdm_symbols,
@@ -502,8 +502,8 @@ class NearestNeighborInterpolator(BaseChannelInterpolator):
         # Transpose outputs to bring batch_dims first again. New shape:
         # [k, l, m, num_tx, num_streams_per_tx,...
         #  ..., num_ofdm_symbols, num_effective_subcarriers]
-        perm = torch.roll(torch.range(outputs.dim()), 3, 0)
-        outputs = outputs.permute(perm)
+        perm = torch.roll(torch.arange(outputs.dim()), 3, 0)
+        outputs = outputs.permute(tuple(perm))
 
         return outputs
 

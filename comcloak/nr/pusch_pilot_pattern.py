@@ -1,14 +1,19 @@
 import torch
-import numpy as np
 import warnings
 from collections.abc import Sequence
 import numpy as np
 from comcloak.ofdm import PilotPattern
 from .pusch_config import PUSCHConfig
 
-class PUSCHPilotPattern:
-    """
-    Class defining a pilot pattern for NR PUSCH in PyTorch.
+class PUSCHPilotPattern(PilotPattern):
+    # pylint: disable=line-too-long
+    r"""Class defining a pilot pattern for NR PUSCH.
+
+    This class defines a :class:`~comcloak.ofdm.PilotPattern`
+    that is used to configure an OFDM :class:`~comcloak.ofdm.ResourceGrid`.
+
+    For every transmitter, a separte :class:`~sionna.nr.PUSCHConfig`
+    needs to be provided from which the pilot pattern will be created.
 
     Parameters
     ----------
@@ -41,7 +46,6 @@ class PUSCHPilotPattern:
         precoding = pusch_configs[0].precoding
         dmrs_ports = []
         num_pilots = np.sum(pusch_configs[0].dmrs_mask)
-
         for pusch_config in pusch_configs:
             assert pusch_config.num_layers == num_streams_per_tx, \
                 "All pusch_configs must have the same number of layers"
@@ -62,19 +66,23 @@ class PUSCHPilotPattern:
             dmrs_ports += pusch_config.dmrs.dmrs_port_set
 
         # Create mask and pilots tensors
-        mask = torch.zeros((num_tx, num_streams_per_tx, num_ofdm_symbols, num_subcarriers), dtype=torch.bool)
-        pilots = torch.zeros((num_tx, num_streams_per_tx, num_pilots), dtype=dtype)
-        
+        mask = np.zeros([num_tx,
+                         num_streams_per_tx,
+                         num_ofdm_symbols,
+                         num_subcarriers], bool)
+        num_pilots = np.sum(pusch_configs[0].dmrs_mask)
+        pilots = np.zeros([num_tx, num_streams_per_tx, num_pilots], complex)
         for i, pusch_config in enumerate(pusch_configs):
             for j in range(num_streams_per_tx):
                 ind0, ind1 = pusch_config.symbol_allocation
-                mask[i, j] = torch.transpose(torch.tensor(pusch_config.dmrs_mask[:, ind0:ind0+ind1], dtype=torch.bool), 0, 1)
-                dmrs_grid = torch.transpose(torch.tensor(pusch_config.dmrs_grid[j, :, ind0:ind0+ind1], dtype=dtype), 0, 1)
-                pilots[i, j] = dmrs_grid[mask[i, j]]
+                mask[i,j] = np.transpose(
+                                pusch_config.dmrs_mask[:, ind0:ind0+ind1])
+                dmrs_grid = np.transpose(
+                                pusch_config.dmrs_grid[j, :, ind0:ind0+ind1])
+                pilots[i,j] = dmrs_grid[np.where(mask[i,j])]
 
-        # Store the mask and pilots as attributes
-        self.mask = mask
-        self.pilots = pilots
-        self.trainable = False
-        self.normalize = False
-        self.dtype = dtype
+        # Init PilotPattern class
+        super().__init__(mask, pilots,
+                         trainable=False,
+                         normalize=False,
+                         dtype=dtype)

@@ -14,14 +14,14 @@ class PUSCHConfig(Config):
 
     Parameters
     ----------
-    carrier_config : :class:`~sionna.nr.CarrierConfig` or `None`
-        An instance of :class:`~sionna.nr.CarrierConfig`. If `None`, a
-        :class:`~sionna.nr.CarrierConfig` instance with default settings
+    carrier_config : :class:`~comcloak.nr.CarrierConfig` or `None`
+        An instance of :class:`~comcloak.nr.CarrierConfig`. If `None`, a
+        :class:`~comcloak.nr.CarrierConfig` instance with default settings
         will be created.
 
-    pusch_dmrs_config : :class:`~sionna.nr.PUSCHDMRSConfig` or `None`
-        An instance of :class:`~sionna.nr.PUSCHDMRSConfig`. If `None`, a
-        :class:`~sionna.nr.PUSCHDMRSConfig` instance with default settings
+    pusch_dmrs_config : :class:`~comcloak.nr.PUSCHDMRSConfig` or `None`
+        An instance of :class:`~comcloak.nr.PUSCHDMRSConfig`. If `None`, a
+        :class:`~comcloak.nr.PUSCHDMRSConfig` instance with default settings
         will be created.
 
     Example
@@ -50,7 +50,7 @@ class PUSCHConfig(Config):
     @property
     def carrier(self):
         """
-        :class:`~sionna.nr.CarrierConfig` : Carrier configuration
+        :class:`~comcloak.nr.CarrierConfig` : Carrier configuration
         """
         return self._carrier
 
@@ -67,7 +67,7 @@ class PUSCHConfig(Config):
     @property
     def dmrs(self):
         """
-        :class:`~sionna.nr.PUSCHDMRSConfig` : PUSCH DMRS configuration
+        :class:`~comcloak.nr.PUSCHDMRSConfig` : PUSCH DMRS configuration
         """
         return self._dmrs
 

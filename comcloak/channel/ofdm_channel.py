@@ -27,7 +27,7 @@ class OFDMChannel(nn.Module):
     def forward(self, inputs):
 
         if self._add_awgn:
-            x,no = inputs
+            x, no = inputs
         else:
             x = inputs
         

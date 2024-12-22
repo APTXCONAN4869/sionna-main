@@ -127,7 +127,7 @@ class OFDMModulator(nn.Module):
         # Compute IFFT along the last dimension
         x = ifft(torch.tensor(inputs))
         # Obtain cyclic prefix
-        cp = x[..., inputs.shape[-1]-self._cyclic_prefix_length:]
+        cp = x[..., int(inputs.shape[-1])-int(self._cyclic_prefix_length):]
         # print("inputs after ifftshift:",inputs)# array
         # print("x after ifft:",x)
         # print("cp:", cp)

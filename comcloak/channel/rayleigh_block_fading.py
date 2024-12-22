@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from comcloak.channel.channel_model import ChannelModel
 
 class RayleighBlockFading(ChannelModel):
@@ -36,26 +37,45 @@ class RayleighBlockFading(ChannelModel):
 
         # Fading coefficients
         std = torch.tensor(torch.sqrt(torch.tensor(0.5)),dtype=real_dtype)
-        h_real = torch.normal(mean=0.0,
-                              std=std,
-                              size=(batch_size, 
-                                    self.num_rx, 
-                                    self.num_rx_ant, 
-                                    self.num_tx, 
-                                    self.num_tx_ant, 
-                                    1, 
-                                    1),
-                            dtype=real_dtype) 
-        h_img = torch.normal(mean=0.0,
-                             std=std,
-                             size=(batch_size,
-                                   self.num_rx,
-                                   self.num_rx_ant,
-                                   self.num_tx,
-                                   self.num_tx_ant,
-                                   1,
-                                   1),
-                            dtype=real_dtype)
+
+        # h_real = torch.normal(mean=0.0,
+        #                       std=std,
+        #                       size=(batch_size, 
+        #                             self.num_rx, 
+        #                             self.num_rx_ant, 
+        #                             self.num_tx, 
+        #                             self.num_tx_ant, 
+        #                             1, 
+        #                             1),
+        #                     dtype=real_dtype) 
+        # h_img = torch.normal(mean=0.0,
+        #                      std=std,
+        #                      size=(batch_size,
+        #                            self.num_rx,
+        #                            self.num_rx_ant,
+        #                            self.num_tx,
+        #                            self.num_tx_ant,
+        #                            1,
+        #                            1),
+        #                     dtype=real_dtype)
+        np.random.seed(0)
+        h_real = np.random.normal(size=[batch_size,
+                                            self.num_rx,
+                                            self.num_rx_ant,
+                                            self.num_tx,
+                                            self.num_tx_ant,
+                                            1, 
+                                            1], loc=0, scale=std)
+        h_img = np.random.normal(size=[batch_size,
+                                            self.num_rx,
+                                            self.num_rx_ant,
+                                            self.num_tx,
+                                            self.num_tx_ant,
+                                            1, 
+                                            1], loc=0, scale=std)
+        h_real =torch.tensor(h_real,  dtype=real_dtype)
+        h_img =torch.tensor(h_img,  dtype=real_dtype)
+
         h = torch.complex(h_real, h_img)
 
         # Tile the response over the block

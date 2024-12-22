@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from comcloak.utils import flatten_last_dims, split_dim
-class LayerMapper(nn.Module):
+class  LayerMapper(nn.Module):
     r"""
     LayerMapper(num_layers=1, verbose=False, **kwargs)
     Performs MIMO layer mapping of modulated symbols to layers as defined in
@@ -38,12 +38,13 @@ class LayerMapper(nn.Module):
     """
 
     def __init__(self, num_layers=1, verbose=False):
-        super(LayerMapper, self).__init__()
+        super().__init__()
         self.shape = None
         assert isinstance(verbose, bool), "verbose must be bool"
         self._verbose = verbose
 
-        assert num_layers in range(1, 9), 'num_layers must be between 1 and 8.'
+        assert num_layers in range(1,9), \
+                            'num_layers must be between 1 and 8.'
         self._num_layers = num_layers
 
         # follow Tab. 7.3.1.3-1 from 38.211 for CW multiplexing
@@ -201,16 +202,23 @@ class LayerDemapper(nn.Module):
     ------
         : [batch_size, n], or [[batch_size, n1], [batch_size, n2]], torch.float
             2+D tensor containing the sequence of bits after layer demapping.
+     Note
+    ----
+    As it is more convenient to apply the layer demapper after demapping
+    symbols to LLRs, this layer groups the input sequence into groups of
+    ``num_bits_per_symbol`` LLRs before restoring the original symbol sequence.
+    This behavior can be deactivated by setting ``num_bits_per_symbol`` =1.
+    
     """
 
     def __init__(self, layer_mapper, num_bits_per_symbol=1):
-        super(LayerDemapper, self).__init__()
+        super().__init__()
         self.shape = None
         assert isinstance(layer_mapper, LayerMapper), "layer_mapper must be LayerMapper."
         self._mapper = layer_mapper
 
-        assert isinstance(num_bits_per_symbol, int) and num_bits_per_symbol > 0, \
-            "num_bits_per_symbol must be a positive integer."
+        assert num_bits_per_symbol%1==0, \
+                    "num_bits_per_symbol must be int."
         self._num_bits_per_symbol = num_bits_per_symbol
 
     def forward(self, inputs):

@@ -9,7 +9,7 @@ from comcloak.mimo import LinearDetector as LinearDetector_
 from comcloak.mimo import KBestDetector as KBestDetector_
 from comcloak.mimo import EPDetector as EPDetector_
 from comcloak.mimo import MMSEPICDetector as MMSEPICDetector_
-
+from comcloak.supplement import gather_pytorch
 
 class OFDMDetector(nn.Module):
     def __init__(self, detector, output, resource_grid, stream_management, dtype=torch.complex64, **kwargs):
@@ -24,7 +24,13 @@ class OFDMDetector(nn.Module):
         # Precompute indices to extract data symbols
         mask = resource_grid.pilot_pattern.mask
         num_data_symbols = resource_grid.pilot_pattern.num_data_symbols
-        data_ind = torch.argsort(flatten_last_dims(mask), descending=False)
+        # data_ind = torch.argsort(flatten_last_dims(mask), descending=False)
+        mask = flatten_last_dims(mask)
+        flattened_tensor = mask.view(-1, mask.shape[-1])
+        data_ind = torch.stack([
+            torch.tensor(sorted(range(flattened_tensor.shape[-1]), key=lambda x: (flattened_tensor[i, x], x)))
+            for i in range(flattened_tensor.shape[0])
+        ]).reshape(mask.shape)
         self._data_ind = data_ind[..., :num_data_symbols]
 
     def _preprocess_inputs(self, y, h_hat, err_var, no):
@@ -64,12 +70,15 @@ class OFDMDetector(nn.Module):
         # Gather desired and undesired channels
         ind_desired = self._stream_management.detection_desired_ind
         ind_undesired = self._stream_management.detection_undesired_ind
-        h_dt_desired = torch.gather(h_dt, 0, ind_desired)
-        h_dt_undesired = torch.gather(h_dt, 0, ind_undesired)
+        h_dt_desired = gather_pytorch(h_dt, ind_desired, axis=0)
+        h_dt_undesired = gather_pytorch(h_dt, ind_undesired, axis=0)
 
         # Split first dimension to separate RX and TX:
-        h_dt_desired = split_dim(h_dt_desired, [self._stream_management.num_rx, self._stream_management.num_streams_per_rx], 0)
-        h_dt_undesired = split_dim(h_dt_undesired, [self._stream_management.num_rx, -1], 0)
+        h_dt_desired = split_dim(h_dt_desired,
+                                  [self._stream_management.num_rx,
+                                    self._stream_management.num_streams_per_rx], 0)
+        h_dt_undesired = split_dim(h_dt_undesired,
+                                    [self._stream_management.num_rx, -1], 0)
 
         # Permute dims to
         perm = [2, 0, 4, 5, 3, 1]
@@ -81,8 +90,9 @@ class OFDMDetector(nn.Module):
         ### Prepare the noise variance ###
         ##################################
         # no is first broadcast to [batch_size, num_rx, num_rx_ant]
-        no_dt = no.unsqueeze(-1).expand_as(y[:, :, :, 0, :])
-        no_dt = no_dt.unsqueeze(-1).expand_as(y)
+        no_dt = expand_to_rank(no, 3, -1)
+        no_dt = no_dt.expand(y.shape[:3])
+        no_dt = expand_to_rank(no_dt, y.dim(), -1)
         no_dt = no_dt.permute(0, 1, 3, 4, 2).contiguous()
         no_dt = no_dt.to(self._dtype)
 
@@ -107,25 +117,48 @@ class OFDMDetector(nn.Module):
     def _extract_datasymbols(self, z):
         """Extract data symbols for all detected TX"""
 
+        # If output is symbols with hard decision, the rank is 5 and not 6 as
+        # for other cases. The tensor rank is therefore expanded with one extra
+        # dimension, which is removed later.
         rank_extended = len(z.shape) < 6
-        z = z.unsqueeze(-1) if rank_extended else z
+        z = expand_to_rank(z, 6, -1)
 
-        z = z.permute(1, 4, 2, 3, 5, 0).contiguous()
+        # Transpose tensor to shape
+        # [num_rx, num_streams_per_rx, num_ofdm_symbols,
+        #    num_effective_subcarriers, num_bits_per_symbol or num_points,
+        #       batch_size]
+        z = z.permute(1, 4, 2, 3, 5, 0)
+
+        # Merge num_rx amd num_streams_per_rx
+        # [num_rx * num_streams_per_rx, num_ofdm_symbols,
+        #    num_effective_subcarriers, num_bits_per_symbol or num_points,
+        #   batch_size]
         z = flatten_dims(z, 2, 0)
 
         stream_ind = self._stream_management.stream_ind
-        z = torch.gather(z, 0, stream_ind)
+        z = gather_pytorch(z, stream_ind, axis=0)
 
+        # Reshape first dimensions to [num_tx, num_streams] so that
+        # we can compare to the way the streams were created.
+        # [num_tx, num_streams, num_ofdm_symbols, num_effective_subcarriers,
+        #     num_bits_per_symbol or num_points, batch_size]
         num_streams = self._stream_management.num_streams_per_tx
         num_tx = self._stream_management.num_tx
         z = split_dim(z, [num_tx, num_streams], 0)
 
+        # Flatten resource grid dimensions
+        # [num_tx, num_streams, num_ofdm_symbols*num_effective_subcarrier,
+        #    num_bits_per_symbol or num_points, batch_size]
         z = flatten_dims(z, 2, 2)
 
-        z = torch.gather(z, 2, self._data_ind.expand(-1, -1, z.size(2), -1, -1))
+        z = gather_pytorch(z, self._data_ind, batch_dims=2, axis=2)
 
-        z = z.permute(5, 0, 1, 2, 3).contiguous()
+        z = z.permute(4, 0, 1, 2, 3).contiguous()
 
+        # Reshape LLRs to
+        # [batch_size, num_tx, num_streams,
+        #     n = num_data_symbols*num_bits_per_symbol]
+        # if output is LLRs on bits
         if self._output == 'bit':
             z = flatten_dims(z, 2, 3)
         if rank_extended:
@@ -135,16 +168,136 @@ class OFDMDetector(nn.Module):
 
     def forward(self, inputs):
         y, h_hat, err_var, no = inputs
+        # y has shape:
+        # [batch_size, num_rx, num_rx_ant, num_ofdm_symbols, fft_size]
 
+        # h_hat has shape:
+        # [batch_size, num_rx, num_rx_ant, num_tx, num_streams,...
+        #  ..., num_ofdm_symbols, num_effective_subcarriers]
+
+        # err_var has a shape that is broadcastable to h_hat
+
+        # no has shape [batch_size, num_rx, num_rx_ant]
+        # or just the first n dimensions of this
+
+        ################################
+        ### Pre-process the inputs
+        ################################
         y_dt, h_dt_desired, s = self._preprocess_inputs(y, h_hat, err_var, no)
 
-        z = self._detector((y_dt, h_dt_desired, s))
+        #################################
+        ### Detection
+        #################################
+        z = self._detector([y_dt, h_dt_desired, s])
 
+        ##############################################
+        ### Extract data symbols for all detected TX
+        ##############################################
         z = self._extract_datasymbols(z)
 
         return z
 
 class OFDMDetectorWithPrior(OFDMDetector):
+    # pylint: disable=line-too-long
+    r"""OFDMDetectorWithPrior(detector, output, resource_grid, stream_management, constellation_type, num_bits_per_symbol, constellation, dtype=tf.complex64, **kwargs)
+
+    Layer that wraps a MIMO detector that assumes prior knowledge of the bits or
+    constellation points is available, for use with the OFDM waveform.
+
+    The parameter ``detector`` is a callable (e.g., a function) that
+    implements a MIMO detection algorithm with prior for arbitrary batch
+    dimensions.
+
+    This class pre-processes the received resource grid ``y``, channel
+    estimate ``h_hat``, and the prior information ``prior``, and computes for each receiver the
+    noise-plus-interference covariance matrix according to the OFDM and stream
+    configuration provided by the ``resource_grid`` and
+    ``stream_management``, which also accounts for the channel
+    estimation error variance ``err_var``. These quantities serve as input to the detection
+    algorithm that is implemented by ``detector``.
+    Both detection of symbols or bits with either soft- or hard-decisions are supported.
+
+    Note
+    -----
+    The callable ``detector`` must take as input a tuple :math:`(\mathbf{y}, \mathbf{h}, \mathbf{prior}, \mathbf{s})` such that:
+
+    * **y** ([...,num_rx_ant], tf.complex) -- 1+D tensor containing the received signals.
+    * **h** ([...,num_rx_ant,num_streams_per_rx], tf.complex) -- 2+D tensor containing the channel matrices.
+    * **prior** ([...,num_streams_per_rx,num_bits_per_symbol] or [...,num_streams_per_rx,num_points], tf.float) -- Prior for the transmitted signals. If ``output`` equals "bit", then LLRs for the transmitted bits are expected. If ``output`` equals "symbol", then logits for the transmitted constellation points are expected.
+    * **s** ([...,num_rx_ant,num_rx_ant], tf.complex) -- 2+D tensor containing the noise-plus-interference covariance matrices.
+
+    It must generate one of the following outputs depending on the value of ``output``:
+
+    * **b_hat** ([..., num_streams_per_rx, num_bits_per_symbol], tf.float) -- LLRs or hard-decisions for every bit of every stream, if ``output`` equals `"bit"`.
+    * **x_hat** ([..., num_streams_per_rx, num_points], tf.float) or ([..., num_streams_per_rx], tf.int) -- Logits or hard-decisions for constellation symbols for every stream, if ``output`` equals `"symbol"`. Hard-decisions correspond to the symbol indices.
+
+    Parameters
+    ----------
+    detector : Callable
+        Callable object (e.g., a function) that implements a MIMO detection
+        algorithm with prior for arbitrary batch dimensions. Either the existing detector
+        :class:`~sionna.mimo.MaximumLikelihoodDetectorWithPrior` can be used, or a custom detector
+        callable provided that has the same input/output specification.
+
+    output : One of ["bit", "symbol"], str
+        Type of output, either bits or symbols
+
+    resource_grid : ResourceGrid
+        Instance of :class:`~sionna.ofdm.ResourceGrid`
+
+    stream_management : StreamManagement
+        Instance of :class:`~sionna.mimo.StreamManagement`
+
+    constellation_type : One of ["qam", "pam", "custom"], str
+        For "custom", an instance of :class:`~sionna.mapping.Constellation`
+        must be provided.
+
+    num_bits_per_symbol : int
+        Number of bits per constellation symbol, e.g., 4 for QAM16.
+        Only required for ``constellation_type`` in ["qam", "pam"].
+
+    constellation : Constellation
+        Instance of :class:`~sionna.mapping.Constellation` or `None`.
+        In the latter case, ``constellation_type``
+        and ``num_bits_per_symbol`` must be provided.
+
+    dtype : One of [tf.complex64, tf.complex128] tf.DType (dtype)
+        The dtype of `y`. Defaults to tf.complex64.
+        The output dtype is the corresponding real dtype (tf.float32 or tf.float64).
+
+    Input
+    ------
+    (y, h_hat, prior, err_var, no) :
+        Tuple:
+
+    y : [batch_size, num_rx, num_rx_ant, num_ofdm_symbols, fft_size], tf.complex
+        Received OFDM resource grid after cyclic prefix removal and FFT
+
+    h_hat : [batch_size, num_rx, num_rx_ant, num_tx, num_streams_per_tx, num_ofdm_symbols, num_effective_subcarriers], tf.complex
+        Channel estimates for all streams from all transmitters
+
+    prior : [batch_size, num_tx, num_streams, num_data_symbols x num_bits_per_symbol] or [batch_size, num_tx, num_streams, num_data_symbols, num_points], tf.float
+        Prior of the transmitted signals.
+        If ``output`` equals "bit", LLRs of the transmitted bits are expected.
+        If ``output`` equals "symbol", logits of the transmitted constellation points are expected.
+
+    err_var : [Broadcastable to shape of ``h_hat``], tf.float
+        Variance of the channel estimation error
+
+    no : [batch_size, num_rx, num_rx_ant] (or only the first n dims), tf.float
+        Variance of the AWGN
+
+    Output
+    ------
+    One of:
+
+    : [batch_size, num_tx, num_streams, num_data_symbols*num_bits_per_symbol], tf.float
+        LLRs or hard-decisions for every bit of every stream, if ``output`` equals `"bit"`.
+
+    : [batch_size, num_tx, num_streams, num_data_symbols, num_points], tf.float or [batch_size, num_tx, num_streams, num_data_symbols], tf.int
+        Logits or hard-decisions for constellation symbols for every stream, if ``output`` equals `"symbol"`.
+        Hard-decisions correspond to the symbol indices.
+    """
     def __init__(self, detector, output, resource_grid, stream_management, constellation_type=None, num_bits_per_symbol=None, constellation=None, dtype=torch.complex64, **kwargs):
         super().__init__(detector=detector,
                          output=output,

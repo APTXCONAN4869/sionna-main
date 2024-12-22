@@ -1,6 +1,3 @@
-"""TB configuration for the nr (5G) sub-package of the Sionna library.
-"""
-
 from .config import Config
 from .utils import select_mcs
 
@@ -341,7 +338,7 @@ class TBConfig(Config):
         int, None (default), [0, 1023] : Data scrambling initialization
             :math:`n_\text{ID}`. Data Scrambling ID related to cell id and
             provided by higher layer. If `None`, the
-            :class:`~sionna.nr.PUSCHConfig` will automatically set
+            :class:`~comcloak.nr.PUSCHConfig` will automatically set
             :math:`n_\text{ID}=N_\text{ID}^{cell}`.
         """
         self._ifndef("n_id", None)

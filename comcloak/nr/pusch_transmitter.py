@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from comcloak.supplement import get_real_dtype
 from comcloak.mapping import Mapper
 from comcloak.utils import BinarySource
 from comcloak.ofdm import ResourceGrid, ResourceGridMapper, OFDMModulator
@@ -14,151 +15,230 @@ import torch
 import torch.nn as nn
 
 class PUSCHTransmitter(nn.Module):
-    r"""
-    PUSCHTransmitter(pusch_configs, return_bits=True, output_domain="freq", dtype=torch.complex64, verbose=False)
+    r"""PUSCHTransmitter(pusch_configs, return_bits=True, output_domain="freq", dtype=torch.complex64, verbose=False, **kwargs)
 
-    生成批量的 5G NR PUSCH 时隙信号，可以是频域或时域输出。
+    This layer generates batches of 5G NR PUSCH slots for multiple transmitters
+    with random or provided payloads. Frequency- or time-domain outputs can be generated.
 
-    参数
+    It combines multiple processing blocks into a single layer
+    as shown in the following figure. Blocks with dashed lines are
+    optional and depend on the configuration.
+
+    .. figure:: ../figures/pusch_transmitter_block_diagram.png
+        :scale: 30%
+        :align: center
+
+    Information bits :math:`\mathbf{b}` that are either randomly generated or
+    provided as input are encoded into a transport block by the :class:`~sionna.nr.TBEncoder`.
+    The encoded bits are then mapped to QAM constellation symbols by the :class:`~sionna.mapping.Mapper`.
+    The :class:`~sionna.nr.LayerMapper` splits the modulated symbols into different layers
+    which are then mapped onto OFDM resource grids by the :class:`~sionna.ofdm.ResourceGridMapper`.
+    If precoding is enabled in the :class:`~sionna.nr.PUSCHConfig`, the resource grids
+    are further precoded so that there is one for each transmitter and antenna port.
+    If ``output_domain`` equals "freq", these are the outputs :math:`\mathbf{x}`.
+    If ``output_domain`` is chosen to be "time", the resource grids are transformed into
+    time-domain signals by the :class:`~sionna.ofdm.OFDMModulator`.
+
+    Parameters
     ----------
-    pusch_configs : instance or list of PUSCHConfig
-        PUSCH 配置。
+    pusch_configs : instance or list of :class:`~sionna.nr.PUSCHConfig`
+        PUSCH Configurations according to which the resource grid and pilot pattern
+        will created. One configuration is needed for each transmitter.
 
     return_bits : bool
-        如果为 True，生成随机信息比特，并将其作为输出之一返回。默认值为 True。
+        If set to `True`, the layer generates random information bits
+        to be transmitted and returns them together with the transmit signal.
+        Defaults to `True`.
 
     output_domain : str, one of ["freq", "time"]
-        输出域，默认为 "freq"。
+        The domain of the output. Defaults to "freq".
 
     dtype : One of [torch.complex64, torch.complex128]
-        输入和输出的数据类型。默认为 torch.complex64。
+        Dtype of inputs and outputs. Defaults to torch.complex64.
 
     verbose: bool
-        如果为 True，则在初始化期间打印额外的参数信息。默认为 False。
-    """
+        If `True`, additional parameters are printed during initialization.
+        Defaults to `False`.
 
-    def __init__(self, pusch_configs, return_bits=True, output_domain="freq", dtype=torch.complex64, verbose=False):
+    Input
+    -----
+    One of:
+
+    batch_size : int
+        Batch size of random transmit signals to be generated,
+        if ``return_bits`` is `True`.
+
+    b : [batch_size, num_tx, tb_size], torch.float
+        Information bits to be transmitted,
+        if ``return_bits`` is `False`.
+
+    Output
+    ------
+    x : [batch size, num_tx, num_tx_ant, num_ofdm_symbols, fft_size], torch.complex or [batch size, num_tx, num_tx_ant, num_time_samples], torch.complex
+        Transmit signal in either frequency or time domain, depending on ``output_domain``.
+
+    b : [batch_size, num_tx, tb_size], torch.float
+        Transmitted information bits.
+        Only returned if ``return_bits`` is `True`.
+
+    Example
+    -------
+    >>> pusch_config = PUSCHConfig()
+    >>> pusch_transmitter = PUSCHTransmitter(pusch_config)
+    >>> x, b = pusch_transmitter(16)
+    >>> print("Shape of x:", x.shape)
+    Shape of x: (16, 1, 1, 14, 48)
+    >>> print("Shape of b:", b.shape)
+    Shape of b: (16, 1, 1352)
+
+    """
+    
+    def __init__(self,
+                 pusch_configs,
+                 return_bits=True,
+                 output_domain="freq",
+                 dtype=torch.complex64,
+                 verbose=False,
+                 ):
+
+        assert dtype in [torch.complex64, torch.complex128], \
+            "dtype must be torch.complex64 or torch.complex128"
         super().__init__()
 
-        # 验证输入
-        assert dtype in [torch.complex64, torch.complex128], "dtype must be torch.complex64 or torch.complex128"
-        self.dtype = dtype
-
+        # Validate inputs and extract parameters
         assert isinstance(return_bits, bool), "return_bits must be bool"
-        self.return_bits = return_bits
+        self._return_bits = return_bits
 
-        assert output_domain in ["time", "freq"], "output_domain must be 'time' or 'freq'"
-        self.output_domain = output_domain
+        assert output_domain in ["time", "freq"], \
+            "output_domain must be 'time' or 'freq'"
+        self._output_domain = output_domain
 
         assert isinstance(verbose, bool), "verbose must be bool"
-        self.verbose = verbose
+        self._verbose = verbose
 
-        # 如果传入的是单个配置，则转换为列表
-        if not isinstance(pusch_configs, list):
+        if isinstance(pusch_configs, PUSCHConfig):
             pusch_configs = [pusch_configs]
 
-        # 验证 PUSCH 配置并提取参数
         params = check_pusch_configs(pusch_configs)
         for key, value in params.items():
-            setattr(self, f"_{key}", value)
+            self.__setattr__(f"_{key}", value)
 
-        self.pusch_configs = pusch_configs
+        self._pusch_configs = pusch_configs
 
-        # (可选) 创建 BinarySource
-        if self.return_bits:
-            self.binary_source = BinarySource(dtype=torch.float32 if dtype == torch.complex64 else torch.float64)
+        # (Optionally) Create BinarySource
+        if self._return_bits:
+            self._binary_source = BinarySource(dtype=get_real_dtype(dtype))
 
-        # 初始化子模块
-        self.tb_encoder = TBEncoder(
-            target_tb_size=self._tb_size,
-            num_coded_bits=self._num_coded_bits,
-            target_coderate=self._target_coderate,
-            num_bits_per_symbol=self._num_bits_per_symbol,
-            num_layers=self._num_layers,
-            n_rnti=self._n_rnti,
-            n_id=self._n_id,
-            channel_type="PUSCH",
-            codeword_index=0,
-            use_scrambler=True,
-            verbose=self.verbose,
-            output_dtype=torch.float32 if dtype == torch.complex64 else torch.float64
-        )
+        # Create TBEncoder
+        self._tb_encoder = TBEncoder(
+                            target_tb_size=self._tb_size,
+                            num_coded_bits=self._num_coded_bits,
+                            target_coderate=self._target_coderate,
+                            num_bits_per_symbol=self._num_bits_per_symbol,
+                            num_layers=self._num_layers,
+                            n_rnti=self._n_rnti,
+                            n_id=self._n_id,
+                            channel_type="PUSCH", # PUSCHTransmitter
+                            codeword_index=0, # not supported for PUSCH
+                            use_scrambler=True,
+                            verbose=self._verbose,
+                            output_dtype=get_real_dtype(dtype))
 
-        self.layer_mapper = LayerMapper(num_layers=self._num_layers, dtype=dtype)
-        self.mapper = Mapper("qam", self._num_bits_per_symbol, dtype=dtype)
-        self.pilot_pattern = PUSCHPilotPattern(self.pusch_configs, dtype=dtype)
+        # Create PUSCHLayerMapper
+        self._layer_mapper = LayerMapper(num_layers=self._num_layers)
 
-        self.resource_grid = ResourceGrid(
-            num_ofdm_symbols=self._num_ofdm_symbols,
-            fft_size=self._num_subcarriers,
-            subcarrier_spacing=self._subcarrier_spacing,
-            num_tx=self._num_tx,
-            num_streams_per_tx=self._num_layers,
-            cyclic_prefix_length=self._cyclic_prefix_length,
-            pilot_pattern=self.pilot_pattern,
-            dtype=dtype
-        )
+        # Create Mapper
+        self._mapper = Mapper("qam",
+                              self._num_bits_per_symbol,
+                              dtype=dtype)
 
-        self.resource_grid_mapper = ResourceGridMapper(self.resource_grid, dtype=dtype)
+        # Create PUSCHPilotPattern
+        self._pilot_pattern = PUSCHPilotPattern(self._pusch_configs,
+                                                dtype=dtype)
 
-        if self._precoding == "codebook":
-            self.precoder = PUSCHPrecoder(self._precoding_matrices, dtype=dtype)
+        # Create ResourceGrid
+        self._resource_grid = ResourceGrid(
+                            num_ofdm_symbols=self._num_ofdm_symbols,
+                            fft_size=self._num_subcarriers,
+                            subcarrier_spacing=self._subcarrier_spacing,
+                            num_tx=self._num_tx,
+                            num_streams_per_tx=self._num_layers,
+                            cyclic_prefix_length=self._cyclic_prefix_length,
+                            pilot_pattern=self._pilot_pattern,
+                            dtype=dtype)
 
-        if self.output_domain == "time":
-            self.ofdm_modulator = OFDMModulator(self._cyclic_prefix_length)
+        # Create ResourceGridMapper
+        self._resource_grid_mapper = ResourceGridMapper(self._resource_grid,
+                                                        dtype=dtype)
+
+        # (Optionally) Create PUSCHPrecoder
+        if self._precoding=="codebook":
+            self._precoder = PUSCHPrecoder(self._precoding_matrices,
+                                           dtype=dtype)
+
+        # (Optionally) Create OFDMModulator
+        if self._output_domain=="time":
+            self._ofdm_modulator = OFDMModulator(self._cyclic_prefix_length)
+
+    #########################################
+    # Public methods and properties
+    #########################################
 
     @property
     def resource_grid(self):
         """OFDM resource grid underlying the PUSCH transmissions"""
-        return self.resource_grid
+        return self._resource_grid
 
     @property
     def pilot_pattern(self):
         """Aggregate pilot pattern of all transmitters"""
-        return self.pilot_pattern
+        return self._pilot_pattern
 
     def show(self):
         """Print all properties of the PUSCHConfig and children"""
-        self.pusch_configs[0].carrier.show()
-        Config.show(self.pusch_configs[0])
-        for idx, p in enumerate(self.pusch_configs):
+        # CarrierConfig is always the same
+        self._pusch_configs[0].carrier.show()
+        Config.show(self._pusch_configs[0])
+        for idx,p in enumerate(self._pusch_configs):
             print(f"---- UE {idx} ----")
             p.dmrs.show()
             p.tb.show()
 
     def forward(self, inputs):
-        if self.return_bits:
-            # inputs 定义 batch_size
+        if self._return_bits:
+            # inputs defines batch_size
             batch_size = inputs
-            b = self.binary_source((batch_size, self._num_tx, self._tb_size))
+            b = self._binary_source([batch_size, self._num_tx, self._tb_size])
         else:
             b = inputs
 
-        # 编码传输块
-        c = self.tb_encoder(b)
+        # Encode transport block
+        c = self._tb_encoder(b)
 
-        # 映射到星座点
-        x_map = self.mapper(c)
+        # Map to constellations
+        x_map = self._mapper(c)
 
-        # 映射到层
-        x_layer = self.layer_mapper(x_map)
+        # Map to layers
+        x_layer = self._layer_mapper(x_map)
 
-        # 资源网格映射
-        x_grid = self.resource_grid_mapper(x_layer)
+        # Apply resource grid mapping
+        x_grid = self._resource_grid_mapper(x_layer)
 
-        # (可选) PUSCH 预编码
-        if self._precoding == "codebook":
-            x_pre = self.precoder(x_grid)
+        # (Optionally) apply PUSCH precoding
+        if self._precoding=="codebook":
+            x_pre = self._precoder(x_grid)
         else:
             x_pre = x_grid
 
-        # (可选) OFDM 调制
-        if self.output_domain == "time":
-            x = self.ofdm_modulator(x_pre)
+        # (Optionally) apply OFDM modulation
+        if self._output_domain=="time":
+            x = self._ofdm_modulator(x_pre)
         else:
             x = x_pre
 
-        if self.return_bits:
+        if self._return_bits:
             return x, b
         else:
             return x
+
+

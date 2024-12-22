@@ -4,7 +4,6 @@
 #
 """Layers for LDPC channel encoding and utility functions."""
 
-import tensorflow as tf
 import torch
 import torch.nn as nn
 import numpy as np
@@ -18,7 +17,7 @@ from comcloak.supplement import gather_pytorch
 
 class LDPC5GEncoder(nn.Module):
     # pylint: disable=line-too-long
-    """LDPC5GEncoder(k, n, num_bits_per_symbol=None, dtype=tf.float32, **kwargs)
+    """LDPC5GEncoder(k, n, num_bits_per_symbol=None, dtype=torch.float32, **kwargs)
 
     5G NR LDPC Encoder following the 3GPP NR Initiative [3GPPTS38212_LDPC]_
     including rate-matching.
@@ -39,19 +38,19 @@ class LDPC5GEncoder(nn.Module):
             explicitly provided, the codeword will be interleaved after
             rate-matching as specified in Sec. 5.4.2.2 in [3GPPTS38212_LDPC]_.
 
-        dtype: tf.DType
-            Defaults to `tf.float32`. Defines the output datatype of the layer
-            (internal precision remains `tf.uint8`).
+        dtype: torch.DType
+            Defaults to `torch.float32`. Defines the output datatype of the layer
+            (internal precision remains `torch.uint8`).
 
     Input
     -----
-        inputs: [...,k], tf.float32
+        inputs: [...,k], torch.float32
             2+D tensor containing the information bits to be
             encoded.
 
     Output
     ------
-        : [...,n], tf.float32
+        : [...,n], torch.float32
             2+D tensor of same shape as inputs besides last dimension has
             changed to `n` containing the encoded codeword bits.
 
@@ -144,67 +143,86 @@ class LDPC5GEncoder(nn.Module):
         encoding scheme.
     """
 
-    def __init__(self, k, n, num_bits_per_symbol=None, dtype=torch.float32):
-        super(LDPC5GEncoder, self).__init__()
+    def __init__(self,
+                 k,
+                 n,
+                 num_bits_per_symbol=None,
+                 dtype=torch.float32):
+
+        super().__init__()
 
         assert isinstance(k, numbers.Number), "k must be a number."
         assert isinstance(n, numbers.Number), "n must be a number."
-        self._k = int(k)
-        self._n = int(n)
+        k = int(k) # k or n can be float (e.g. as result of n=k*r)
+        n = int(n) # k or n can be float (e.g. as result of n=k*r)
 
-        if dtype not in (torch.float16, torch.float32, torch.float64, 
-                         torch.int8, torch.int32, torch.int64, 
-                         torch.uint8, torch.uint16, torch.uint32):
+        if dtype is not torch.float32:
+            print("Note: decoder uses torch.float32 for internal calculations.")
+
+        if dtype not in (torch.float16, torch.float32, torch.float64, torch.int8,
+            torch.int32, torch.int64, torch.uint8, torch.uint16, torch.uint32):
             raise ValueError("Unsupported dtype.")
-        self.dtype = dtype
+        self._dtype = dtype
 
-        if self.k > 8448:
+        if k>8448:
             raise ValueError("Unsupported code length (k too large).")
-        if self.k < 12:
+        if k<12:
             raise ValueError("Unsupported code length (k too small).")
 
-        if self.n > (316 * 384):
+        if n>(316*384):
             raise ValueError("Unsupported code length (n too large).")
-        if self.n < 0:
+        if n<0:
             raise ValueError("Unsupported code length (n negative).")
 
-         # Initialize encoder parameters
-        self._coderate = self.k / self.n
-        self.check_input = True  # check input for consistency (i.e., binary)
+        # init encoder parameters
+        self._k = k # number of input bits (= input shape)
+        self._n = n # the desired length (= output shape)
+        self._coderate = k / n
+        self._check_input = True # check input for consistency (i.e., binary)
 
-        if self.coderate > (948 / 1024):
-            print(f"Warning: effective coderate r>948/1024 for n={self.n}, k={self.k}.")
-        if self.coderate > 0.95:
-            raise ValueError(f"Unsupported coderate (r>0.95) for n={self.n}, k={self.k}.")
-        if self.coderate < (1 / 5):
+        # allow actual code rates slightly larger than 948/1024
+        # to account for the quantization procedure in 38.214 5.1.3.1
+        if self._coderate>(948/1024): # as specified in 38.212 5.4.2.1
+            print(f"Warning: effective coderate r>948/1024 for n={n}, k={k}.")
+        if self._coderate>(0.95): # as specified in 38.212 5.4.2.1
+            raise ValueError(f"Unsupported coderate (r>0.95) for n={n}, k={k}.")
+        if self._coderate<(1/5):
+            # outer rep. coding currently not supported
             raise ValueError("Unsupported coderate (r<1/5).")
 
-        # Construct the basegraph according to 38.212
-        self.bg = self._sel_basegraph(self.k, self.coderate)
-        self._z, self.i_ls, self.k_b = self._sel_lifting(self.k, self.bg)
-        self.bm = self._load_basegraph(self.i_ls, self.bg)
+        # construct the basegraph according to 38.212
+        self._bg = self._sel_basegraph(self._k, self._coderate)
+        self._z, self._i_ls, self._k_b = self._sel_lifting(self._k, self._bg)
+        self._bm = self._load_basegraph(self._i_ls, self._bg)
 
-        # Total number of codeword bits
-        self._n_ldpc = self.bm.shape[1] * self.z
-        self._k_ldpc = self.k_b * self.z  # If K_real < K_target, puncturing must be applied earlier
+        # total number of codeword bits
+        self._n_ldpc = self._bm.shape[1] * self._z
+        # if K_real < K _target puncturing must be applied earlier
+        self._k_ldpc = self._k_b * self._z
 
-        # Construct explicit graph via lifting
-        pcm = self._lift_basegraph(self.bm, self.z)
+        # construct explicit graph via lifting
+        pcm = self._lift_basegraph(self._bm, self._z)
 
-        pcm_a, pcm_b_inv, pcm_c1, pcm_c2 = self._gen_submat(self.bm, self.k_b, self.z, self.bg)
+        pcm_a, pcm_b_inv, pcm_c1, pcm_c2 = self._gen_submat(self._bm,
+                                                            self._k_b,
+                                                            self._z,
+                                                            self._bg)
 
-        # Init sub-matrices for fast encoding ("RU"-method)
-        self._pcm = pcm  # Store the sparse parity-check matrix (for decoding)
+        # init sub-matrices for fast encoding ("RU"-method)
+        # note: dtype is torch.float32;
+        self._pcm = pcm # store the sparse parity-check matrix (for decoding)
 
-        # Store indices for fast gathering
-        self.pcm_a_ind = self._mat_to_ind(pcm_a)
-        self.pcm_b_inv_ind = self._mat_to_ind(pcm_b_inv)
-        self.pcm_c1_ind = self._mat_to_ind(pcm_c1)
-        self.pcm_c2_ind = self._mat_to_ind(pcm_c2)
+        # store indices for fast gathering (instead of explicit matmul)
+        self._pcm_a_ind = self._mat_to_ind(pcm_a)
+        self._pcm_b_inv_ind = self._mat_to_ind(pcm_b_inv)
+        self._pcm_c1_ind = self._mat_to_ind(pcm_c1)
+        self._pcm_c2_ind = self._mat_to_ind(pcm_c2)
 
         self._num_bits_per_symbol = num_bits_per_symbol
         if num_bits_per_symbol is not None:
-            self._out_int, self._out_int_inv = self.generate_out_int(self.n, self.num_bits_per_symbol)
+            self._out_int, self._out_int_inv  = self.generate_out_int(self._n,
+                                                    self._num_bits_per_symbol)
+
     #########################################
     # Public methods and properties
     #########################################
@@ -262,7 +280,7 @@ class LDPC5GEncoder(nn.Module):
     # Utility methods
     #########################
 
-    def generate_out_int(self, n, num_bits_per_symbol): #交织算法模块
+    def generate_out_int(self, n, num_bits_per_symbol):
         """"Generates LDPC output interleaver sequence as defined in
         Sec 5.4.2.2 in [3GPPTS38212_LDPC]_.
 
@@ -303,16 +321,17 @@ class LDPC5GEncoder(nn.Module):
             "n must be a multiple of num_bits_per_symbol."
 
         # pattern as defined in Sec 5.4.2.2
-        perm_seq = torch.zeros(n, dtype=torch.int)
-        for j in range(n // num_bits_per_symbol):
+        perm_seq = np.zeros(n, dtype=int)
+        for j in range(int(n/num_bits_per_symbol)):
             for i in range(num_bits_per_symbol):
-                perm_seq[i + j * num_bits_per_symbol] = int(i * (n // num_bits_per_symbol) + j)
+                perm_seq[i + j*num_bits_per_symbol] \
+                    = int(i * int(n/num_bits_per_symbol) + j)
 
-        perm_seq_inv = perm_seq.argsort()
+        perm_seq_inv = np.argsort(perm_seq)
 
         return perm_seq, perm_seq_inv
 
-    def _sel_basegraph(self, k, r): #BaseGraph Selection
+    def _sel_basegraph(self, k, r):
         """Select basegraph according to [3GPPTS38212_LDPC]_."""
 
         # Check the value of k and r to determine the basegraph
@@ -325,19 +344,20 @@ class LDPC5GEncoder(nn.Module):
         else:
             bg = "bg1"
 
-        # Check for constraints based on the selected basegraph
-        if bg == "bg1" and k > 8448:
+        # add for consistency
+        if bg=="bg1" and k>8448:
             raise ValueError("K is not supported by BG1 (too large).")
 
-        if bg == "bg2" and k > 3840:
-            raise ValueError(f"K is not supported by BG2 (too large) k = {k}.")
+        if bg=="bg2" and k>3840:
+            raise ValueError(
+                f"K is not supported by BG2 (too large) k ={k}.")
 
-        if bg == "bg1" and r < 1 / 3:
-            raise ValueError("Only coderate > 1/3 supported for BG1. \
+        if bg=="bg1" and r<1/3:
+            raise ValueError("Only coderate>1/3 supported for BG1. \
             Remark: Repetition coding is currently not supported.")
 
-        if bg == "bg2" and r < 1 / 5:
-            raise ValueError("Only coderate > 1/5 supported for BG2. \
+        if bg=="bg2" and r<1/5:
+            raise ValueError("Only coderate>1/5 supported for BG2. \
             Remark: Repetition coding is currently not supported.")
 
         return bg
@@ -445,11 +465,6 @@ class LDPC5GEncoder(nn.Module):
             else:
                 k_b = 6
 
-        # Find the min of Z such that k_b * Z >= K
-        min_val = float('inf')
-        z = 0
-        i_ls = 0
-
         # find the min of Z from Tab. 5.3.2-1 s.t. k_b*Z>=K'
         min_val = 100000
         z = 0
@@ -473,7 +488,7 @@ class LDPC5GEncoder(nn.Module):
             k_b = 10
 
         return z, i_ls, k_b
-    
+
     def _gen_submat(self, bm, k_b, z, bg):
         """Split the basegraph into multiple sub-matrices such that efficient
         encoding is possible.
@@ -589,7 +604,7 @@ class LDPC5GEncoder(nn.Module):
 
     def _mat_to_ind(self, mat):
         """Helper to transform matrix into index representation for
-        tf.gather. An index pointing to the `last_ind+1` is used for non-existing edges due to irregular degrees."""
+        torch gather. An index pointing to the `last_ind+1` is used for non-existing edges due to irregular degrees."""
         m = mat.shape[0]
         n = mat.shape[1]
 
@@ -627,40 +642,33 @@ class LDPC5GEncoder(nn.Module):
     def _matmul_gather(self, mat, vec):
         """Implements a fast sparse matmul via gather function."""
         # add 0 entry for gather-reduce_sum operation
+        # (otherwise ragged Tensors are required)
         bs = vec.shape[0]
-        # print("Vec.shape: ", vec.shape)
-        # print("bs: ", bs)
-        vec = torch.cat([vec, torch.zeros((bs, 1), dtype=vec.dtype)], dim=1)
-        # print("vec: ",vec)
-        # print("Mat:", mat)
+        vec = torch.cat([vec, torch.zeros([bs, 1], dtype=self._dtype)], 1)
+
         retval = gather_pytorch(vec, mat, batch_dims=0, axis=1)
-        # print("Retval1:", retval)
-        retval = retval.sum(dim=-1)
-        # print("Retval2:", retval)
-        # print("Executed for once")
+        retval = torch.sum(retval, dim=-1)
+
         return retval
 
 
     def _encode_fast(self, s):
         """Main encoding function based on gathering function."""
-        p_a = self._matmul_gather(self.pcm_a_ind, s)
-        # print("p_a temp: ", p_a)
-        p_a = self._matmul_gather(self.pcm_b_inv_ind, p_a)
+        p_a = self._matmul_gather(self._pcm_a_ind, s)
+        p_a = self._matmul_gather(self._pcm_b_inv_ind, p_a)
 
         # calc second part of parity bits p_b
-        p_b_1 = self._matmul_gather(self.pcm_c1_ind, s)
-        p_b_2 = self._matmul_gather(self.pcm_c2_ind, p_a)
+        # second parities are given by C_1*s' + C_2*p_a' + p_b' = 0
+        p_b_1 = self._matmul_gather(self._pcm_c1_ind, s)
+        p_b_2 = self._matmul_gather(self._pcm_c2_ind, p_a)
         p_b = p_b_1 + p_b_2
 
-        # print("p_a type: ", p_a.dtype)
-        # print("p_b type: ", p_b.dtype)
-        # print("s type: ", s.dtype)
-        s = s.type(p_a.dtype)    #将s的类型转化为p_a和p_b相同，防止torch.cat函数遇到类型不兼容导致的Promotion Failure的问题
-        c = torch.cat([s, p_a, p_b], dim=1)
+        c = torch.cat([s, p_a, p_b], 1)
 
         # faster implementation of mod-2 operation
-        c_bin = c % 2
-        c = c_bin.to(s.dtype)
+        c_uint8 = c.to(torch.uint8)
+        c_bin = c_uint8 & 1  
+        c = c_bin.to(self._dtype)
 
         c = c.unsqueeze(-1)  # returns nx1 vector
         return c
@@ -669,14 +677,13 @@ class LDPC5GEncoder(nn.Module):
         # Keras layer functions
         #########################
 
-    def build(self, input_shape):
-        """"Build layer."""
-        # check if k and input shape match
-        assert (input_shape[-1]==self._k), "Last dimension must be of length k."
-        assert (len(input_shape)>=2), "Rank of input must be at least 2."
+
+        
 
     def forward(self, inputs):
         """5G LDPC encoding function including rate-matching.
+
+        This function returns the encoded codewords as specified by the 3GPP NR Initiative [3GPPTS38212_LDPC]_ including puncturing and shortening.
 
         Args:
             inputs (torch.float32): Tensor of shape `[...,k]` containing the
@@ -690,31 +697,30 @@ class LDPC5GEncoder(nn.Module):
             RuntimeError: When rank(``inputs``)<2.
             RuntimeError: When shape of last dim is not ``k``.
         """
-
-        if not inputs.dtype == self.dtype:
+        # check if k and input shape match
+        input_shape = inputs.shape
+        assert (input_shape[-1]==self._k), "Last dimension must be of length k."
+        assert (len(input_shape)>=2), "Rank of input must be at least 2."
+        if not inputs.dtype == self._dtype:
             raise TypeError("Invalid input dtype.")
-        # torch.assert_type(inputs, self.dtype, "Invalid input dtype.")
-        # assert type(inputs) is self.dtype, f"Invalid input dtype"
-        # tf.debugging.assert_type(inputs, self.dtype, "Invalid input dtype.")
 
         # Reshape inputs to [...,k]
-        input_shape = inputs.shape
+        
         u = inputs.view(-1, input_shape[-1])
-        # print("inputs: ", inputs)
-        # print("input_shape: ", input_shape)
-        # print("u: ", u)
+        
 
         # Assert if u is non-binary
-        if self.check_input:
+        if self._check_input:
             if not ((u == 0) | (u == 1)).all():
                 raise ValueError("Input must be binary.")
-            self.check_input = False
+            # input datatype consistency should be only evaluated once
+            self._check_input = False
 
-        batch_size = u.size(0)
+        batch_size = u.shape[0]
 
         # Add "filler" bits to match info bit length k_ldpc
-        u_fill = torch.cat([u, torch.zeros((batch_size, self._k_ldpc - self._k), dtype=self.dtype)], dim=1)
-        # print("u_fill: ",u_fill)
+        u_fill = torch.cat([u, torch.zeros((batch_size, self._k_ldpc - self._k), dtype=self._dtype)], dim=1)
+
 
         # Use optimized encoding based on custom encode function
         c = self._encode_fast(u_fill)
@@ -729,15 +735,17 @@ class LDPC5GEncoder(nn.Module):
         # Shorten the first 2*Z positions and end after n bits
         c_short = c_no_filler[:, 2 * self._z: 2 * self._z + self._n]
 
-        # If num_bits_per_symbol is provided, apply output interleaver
+        # if num_bits_per_symbol is provided, apply output interleaver as
+        # specified in Sec. 5.4.2.2 in 38.212
         if self._num_bits_per_symbol is not None:
-            c_short = c_short[:, self._out_int]
+            c_short = gather_pytorch(c_short, self._out_int, axis=-1)
 
-        # Reshape c_short to match the original input dimensions
-        output_shape = list(input_shape[:-1]) + [self._n]
-        c_reshaped = c_short.view(output_shape)
+        # Reshape c_short so that it matches the original input dimensions
+        output_shape = list(input_shape[0:-1]) + [self.n]
+        output_shape[0] = -1
+        c_reshaped = torch.reshape(c_short, output_shape)
 
-        return c_reshaped.to(self.dtype)
+        return c_reshaped.to(self._dtype)
 
 
 ###########################################################

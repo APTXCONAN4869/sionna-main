@@ -40,30 +40,42 @@ class PUSCHPrecoder(nn.Module):
 
         # Ensure all precoding matrices have the same shape
         shape = precoding_matrices[0].shape
+        w_list = []
         for w in precoding_matrices:
-            assert w.shape == shape, "All precoding matrices must have the same shape"
+            assert w.shape[0]==shape[0] and w.shape[1]==shape[1], \
+                "All precoding matrices must have the same shape"
+            w_list.append(w)
 
-        # Convert list to tensor for efficient operations
-        self.w = torch.stack(precoding_matrices).type(dtype)  # Shape: [num_tx, num_antenna_ports, num_layers]
+        # w has shape:
+        #[num_tx, num_antenna_ports, num_layers]
+        self._w = torch.tensor(w_list, dtype=self.dtype)
+
+    def build(self, input_shape):
+        _, num_tx, num_layers, _, _ = input_shape
+        assert num_tx==len(self._w), \
+            f"""The input shape is for {num_tx} transmitters, but you have
+                configured precoding matrices for {len(self._w)}."""
+        assert num_layers==self._w[0].shape[1], \
+            f"""You have configured precoding matrices for
+                {self._w[0].shape[1]} layers, but the input
+                provides {num_layers} layers."""
 
     def forward(self, inputs):
-        # inputs shape: [batch_size, num_tx, num_layers, num_symbols_per_slot, num_subcarriers]
-        
-        # Verify compatibility between inputs and precoding matrices
-        _, num_tx, num_layers, _, _ = inputs.shape
-        assert num_tx == self.w.shape[0], \
-            f"The input shape has {num_tx} transmitters, but {self.w.shape[0]} precoding matrices were provided."
-        assert num_layers == self.w.shape[2], \
-            f"The input provides {num_layers} layers, but precoding matrices have {self.w.shape[2]} layers."
 
-        # Change ordering of dimensions for multiplication: [batch_size, num_symbols_per_slot, num_subcarriers, num_tx, num_layers]
+        # inputs has shape:
+        # [batch_size, num_tx, num_layers, num_symbols_per_slot,...
+        #  ..., num_subcarriers]
+
+        # Change ordering of dimensions:
+        # [batch_size, num_symbols_per_slot, num_subcarriers, num_tx,...
+        #  ..., num_layers]
         inputs = inputs.permute(0, 3, 4, 1, 2)
 
         # Expand dimensions for matrix multiplication: [batch_size, num_symbols_per_slot, num_subcarriers, num_tx, num_layers, 1]
         inputs = inputs.unsqueeze(-1)
 
         # Precode: result shape [batch_size, num_symbols_per_slot, num_subcarriers, num_tx, num_antenna_ports]
-        z = torch.matmul(self.w.unsqueeze(0).unsqueeze(0).unsqueeze(0), inputs).squeeze(-1)
+        z = torch.matmul(self._w.unsqueeze(0).unsqueeze(0).unsqueeze(0), inputs).squeeze(-1)
 
         # Reorder dimensions to match desired output: [batch_size, num_tx, num_antenna_ports, num_symbols_per_slot, num_subcarriers]
         z = z.permute(0, 3, 4, 1, 2)
