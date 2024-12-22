@@ -144,6 +144,8 @@ def expand_to_rank(tensor, target_rank, axis=-1):
         index specified by axis.
         If target_rank <= rank(tensor), tensor is returned.
     """
+    if not isinstance(tensor, torch.Tensor):
+        tensor = torch.tensor(tensor)
     current_rank = tensor.dim()
     num_dims = max(target_rank - current_rank, 0)
     output = insert_dims(tensor, num_dims, axis)

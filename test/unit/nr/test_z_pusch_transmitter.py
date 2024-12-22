@@ -59,8 +59,8 @@ def run_test(test_name):
     pusch_config.tb.mcs_table = config["pusch"]["tb"]["mcs_table"]
 
     pusch_transmitter = PUSCHTransmitter(pusch_config, return_bits=False)
-
-    x_grid = pusch_transmitter(torch.tensor(b))
+    b = torch.tensor(b.numpy())
+    x_grid = pusch_transmitter(b)
     x_grid = x_grid[0, 0].permute(2, 1, 0)  # Transpose dimensions to match reference
     return torch.allclose(x_grid.squeeze(), torch.tensor(grid, dtype=x_grid.dtype))
 
@@ -71,5 +71,8 @@ class TestPUSCHTransmitter(unittest.TestCase):
     def tests_against_reference(self):
         """Test PUSCHTransmitter output against reference"""
         for i in range(0, 83):
-            test_name = f"unit/nr/pusch_test_configs/test_{i}"
+            test_name = f"test/unit/nr/pusch_test_configs/test_{i}"
             self.assertTrue(run_test(test_name))
+
+if __name__ == '__main__':
+    unittest.main()

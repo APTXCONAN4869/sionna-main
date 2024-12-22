@@ -1,4 +1,4 @@
-"""Abstract class for configuration of Sionna's (NR) sub-package.
+"""Abstract class for configuration of comcloak's (NR) sub-package.
 """
 
 from abc import ABC
@@ -7,7 +7,7 @@ import numpy as np
 
 class Config(ABC):
     # pylint: disable=line-too-long
-    """Abstract configuration class for the nr (5G) sub-package of the Sionna library.
+    """Abstract configuration class for the nr (5G) sub-package of the comcloak library.
     """
     def __init__(self, **kwargs):
         for key, value in kwargs.items():

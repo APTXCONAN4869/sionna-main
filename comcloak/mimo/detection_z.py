@@ -3,8 +3,8 @@ import numpy as np
 import torch
 from comcloak.utils import expand_to_rank, matrix_sqrt_inv, flatten_last_dims, flatten_dims, split_dim, insert_dims, hard_decisions
 from comcloak.mapping import Constellation, SymbolLogits2LLRs, LLRs2SymbolLogits, PAM2QAM, Demapper, SymbolDemapper, SymbolInds2Bits, DemapperWithPrior, SymbolLogits2Moments
-from comcloak.mimo.utils import complex2real_channel, whiten_channel, List2LLR, List2LLRSimple, complex2real_matrix, complex2real_vector, real2complex_vector
-from comcloak.mimo.equalization import lmmse_equalizer, zf_equalizer, mf_equalizer
+from comcloak.mimo.utils_z import complex2real_channel, whiten_channel, List2LLR, List2LLRSimple, complex2real_matrix, complex2real_vector, real2complex_vector
+from comcloak.mimo.equalization_z import lmmse_equalizer, zf_equalizer, mf_equalizer
 from comcloak.supplement import gather_pytorch, gather_nd_pytorch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -141,7 +141,7 @@ class LinearDetector(nn.Module):
         num_streams = inputs[1].shape[-1]
         if self._output == 'bit':
             num_bits_per_symbol = self._constellation.num_bits_per_symbol
-            z = split_dim(z, [num_streams, num_bits_per_symbol], z.dim-1)
+            z = split_dim(z, [num_streams, num_bits_per_symbol], z.dim()-1)
 
         return z
 

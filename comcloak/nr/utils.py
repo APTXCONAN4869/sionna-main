@@ -1,6 +1,3 @@
-"""Utility functions for the nr (5G) sub-package of the Sionna library.
-"""
-
 import numpy as np
 def generate_prng_seq(length, c_init):
     r"""Implements pseudo-random sequence generator as defined in Sec. 5.2.1

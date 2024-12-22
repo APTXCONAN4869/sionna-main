@@ -1,5 +1,5 @@
 import torch
-from sionna.utils import matrix_inv
+from comcloak.utils import matrix_inv
 
 def zero_forcing_precoder(x, h, return_precoding_matrix=False):
     # pylint: disable=line-too-long

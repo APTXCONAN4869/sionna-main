@@ -57,8 +57,8 @@ def check_channel_estimation(pusch_configs, add_awgn=False):
         # Multiply by precoding matrices to compute effective channels
         # [batch size, num_rx, num_tx, num_ofdm_symbols, fft_size, num_rx_ant, num_streams]
         w = pusch_transmitter._precoder._w
-        w = w.unsqueeze(2)  # Add extra dimension for broadcasting
-        h = torch.einsum("...ijk,...kl->...ijl", h, w)
+        w = insert_dims(w, 2, 1)
+        h = torch.matmul(h, w)
 
         # [batch size, num_rx, num_rx_ant, num_tx, num_streams, num_ofdm_symbols, fft_size]
         h = h.permute(0, 1, 5, 2, 6, 3, 4)
@@ -67,7 +67,6 @@ def check_channel_estimation(pusch_configs, add_awgn=False):
 
     # Compute empirical error variance
     err_var = torch.var(h - h_hat)
-
     return_val = torch.allclose(h, h_hat, atol=1e-6) if not add_awgn else torch.allclose(err_var, err_var_hat, atol=1e-2)
 
     return return_val
@@ -150,3 +149,6 @@ class TestPUSCHLSChannelEstimator(unittest.TestCase):
         pusch_configs = [pusch_config, pusch_config2, pusch_config3]
         self.assertTrue(check_channel_estimation(pusch_configs))
         self.assertTrue(check_channel_estimation(pusch_configs, add_awgn=True))
+
+if __name__ == '__main__':
+    unittest.main()

@@ -104,6 +104,7 @@ class TBEncoder(nn.Module):
     :meth:`~sionna.nr.calculate_tb_size` function or
     by accessing the corresponding :class:`~sionna.nr.PUSCHConfig` attributes.
     """
+
     def __init__(self,
                  target_tb_size,
                  num_coded_bits,
@@ -357,7 +358,11 @@ class TBEncoder(nn.Module):
             f"Invalid input shape. Expected TB length is {self.k}."
         u = inputs.to(torch.float32)
 
-        if self.k_padding > 0:
+        # apply zero padding if tb_size is slightly different to target_tb_size
+        if self._k_padding > 0:
+            # s = list(u.shape)
+            # s = torch.cat((torch.tensor(s[:-1]), torch.tensor([self._k_padding])), dim=0)
+            # u = torch.cat((u, torch.zeros(s, dtype=u.dtype)), dim=-1)
             padding = torch.zeros((*u.shape[:-1], self.k_padding),
                                   dtype=u.dtype, device=u.device)
             u = torch.cat((u, padding), dim=-1)
@@ -378,25 +383,29 @@ class TBEncoder(nn.Module):
 
         c_cb = self._encoder(u_cb_crc)
         # CB concatenation
-        c = c_cb.view(-1, self._num_tx, 
-                      self._num_cbs * np.max(self._cw_lengths))
+        c = torch.reshape(c_cb,
+                       (-1, self._num_tx,
+                       self._num_cbs*np.max(self._cw_lengths)))
 
+        # apply interleaver (done after CB concatenation)
         c = gather_pytorch(c, self._output_perm, axis=-1)
+        # puncture last bits
         c = c[:, :, :np.sum(self._cw_lengths)]
 
+        # scrambler
         if self._use_scrambler:
             c_scr = self._scrambler(c)
-        else:
+        else: # disable scrambler (non-standard compliant)
             c_scr = c
 
         # cast to output dtype
-        c_scr = torch.tensor(c_scr, dtype=self.dtype)
+        if not isinstance(c_scr, torch.Tensor):
+            c_scr = torch.tensor(c_scr, dtype=self.dtype)   
 
         # ensure output shapes
         output_shape = list(inputs.shape)
         output_shape[0] = -1
-        output_shape[-1] = np.sum(self.cw_lengths)
-
-        c_tb = c_scr.view(output_shape)
+        output_shape[-1] = np.sum(self._cw_lengths)
+        c_tb = torch.reshape(c_scr, output_shape)
 
         return c_tb

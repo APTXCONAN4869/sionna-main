@@ -128,6 +128,7 @@ class PUSCHReceiver(Layer):
     >>> compute_ber(b, b_hat)
     <tf.Tensor: shape=(), dtype=float64, numpy=0.0>
     """
+    
     def __init__(self,
                  pusch_transmitter,
                  channel_estimator=None,

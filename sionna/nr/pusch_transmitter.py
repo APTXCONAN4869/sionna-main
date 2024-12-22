@@ -96,6 +96,7 @@ class PUSCHTransmitter(Layer):
     Shape of b: (16, 1, 1352)
 
     """
+    
     def __init__(self,
                  pusch_configs,
                  return_bits=True,
