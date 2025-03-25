@@ -809,7 +809,7 @@ class ChannelCoefficientsGenerator:
             # the other elements are already 0
 
             gather_ind = scatter_nd_torch(torch.reshape(ant_ind_pol2, [-1,1]),
-                torch.ones([num_ant_pol2], torch.int32), [num_ant_tx])
+                torch.ones([num_ant_pol2], dtype=torch.int32), [num_ant_tx])
             f_tx_array = gather_pytorch(pol_tx,indices=gather_ind,dim=0)
 
         num_ant_rx = self._rx_array.num_ant

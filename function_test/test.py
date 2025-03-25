@@ -128,19 +128,51 @@ def gather_pytorch(input_data, indices=None, batch_dims=0, axis=0):
 # # 输出
 # print(reduced)
 
-import tensorflow as tf
+# import tensorflow as tf
 
-sign_val = tf.constant([
-    [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]],  # 第一批次
-    [[13, 14, 15, 16], [17, 18, 19, 20], [21, 22, 23, 24]]  # 第二批次
-], dtype=tf.float32)
+# sign_val = tf.constant([
+#     [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]],  # 第一批次
+#     [[13, 14, 15, 16], [17, 18, 19, 20], [21, 22, 23, 24]]  # 第二批次
+# ], dtype=tf.float32)
 
-print(sign_val.shape)  # (2, 3, 4)
-result = tf.reduce_prod(sign_val)
-print(result.shape)
-result = tf.reduce_prod(sign_val, axis=0)
-print(result.shape)
-result = tf.reduce_prod(sign_val, axis=1)
-print(result.shape)
-result = tf.reduce_prod(sign_val, axis=2)
-print(result.shape)
+# print(sign_val.shape)  # (2, 3, 4)
+# result = tf.reduce_prod(sign_val)
+# print(result.shape)
+# result = tf.reduce_prod(sign_val, axis=0)
+# print(result.shape)
+# result = tf.reduce_prod(sign_val, axis=1)
+# print(result.shape)
+# result = tf.reduce_prod(sign_val, axis=2)
+# print(result.shape)
+def gather_pytorch2(input_data, indices=None, batch_dims=0, axis=0):
+    input_data = torch.tensor(input_data)
+    indices = torch.tensor(indices)
+    if axis == None:
+        axis =0 
+    if batch_dims == 0:
+        if axis < 0:
+            axis = len(input_data.shape) + axis
+        data = torch.index_select(input_data, axis, indices.flatten())
+        shape_input = list(input_data.shape)
+        # shape_ = delete(shape_input, axis)
+        # 连接列表
+        shape_output = shape_input[:axis] + \
+            list(indices.shape)[batch_dims:] + shape_input[axis + 1:]
+        data_output = data.reshape(shape_output)
+        return data_output
+    else:
+        data_output = []
+        for data,ind in zip(input_data, indices):
+            r = gather_pytorch2(data, ind, batch_dims=batch_dims-1)
+            data_output.append(r)
+        return torch.stack(data_output)
+
+params = torch.tensor([
+    [0, 0, 1, 0, 2],
+    [3, 0, 0, 0, 4],
+    [0, 5, 0, 6, 0]])
+indices = torch.tensor([
+    [2, 4],
+    [0, 4],
+    [1, 3]])
+print(gather_pytorch2(params, indices, axis=1, batch_dims=1).numpy())

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import comcloak
-from ofdm_test_module_z import flatten_dims, split_dim, flatten_last_dims, expand_to_rank
+from comcloak.utils import flatten_dims, split_dim, flatten_last_dims, expand_to_rank
 from comcloak.ofdm import RemoveNulledSubcarriers
 
 from sionna.mimo import lmmse_equalizer, zf_equalizer, mf_equalizer

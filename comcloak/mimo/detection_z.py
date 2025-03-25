@@ -5,7 +5,7 @@ from comcloak.utils import expand_to_rank, matrix_sqrt_inv, flatten_last_dims, f
 from comcloak.mapping import Constellation, SymbolLogits2LLRs, LLRs2SymbolLogits, PAM2QAM, Demapper, SymbolDemapper, SymbolInds2Bits, DemapperWithPrior, SymbolLogits2Moments
 from comcloak.mimo.utils_z import complex2real_channel, whiten_channel, List2LLR, List2LLRSimple, complex2real_matrix, complex2real_vector, real2complex_vector
 from comcloak.mimo.equalization_z import lmmse_equalizer, zf_equalizer, mf_equalizer
-from comcloak.supplement import gather_pytorch, gather_nd_pytorch
+from comcloak.supplement import gather_pytorch, gather_nd_pytorch, get_real_dtype
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -974,34 +974,52 @@ class KBestDetector(nn.Module):
         self._use_real_rep = use_real_rep
 
         if self._use_real_rep:
+            # Real-valued representation is used
             err_msg = "Only QAM can be used for the real-valued representation"
             if constellation_type is not None:
                 assert constellation_type == "qam", err_msg
             else:
                 assert constellation._constellation_type == "qam", err_msg
 
+            # Double the number of streams to dectect
             self._num_streams = 2 * num_streams
+
+            # Half the number of bits for the PAM constellation
             if num_bits_per_symbol is None:
                 n = constellation.num_bits_per_symbol // 2
                 self._num_bits_per_symbol = n
             else:
                 self._num_bits_per_symbol = num_bits_per_symbol // 2
 
-            c = Constellation("pam", self._num_bits_per_symbol, normalize=False, dtype=dtype)
+             # Geerate a PAM constellation with 0.5 energy
+            c = Constellation("pam",
+                                self._num_bits_per_symbol,
+                                normalize=False,
+                                dtype=dtype)            
             c._points /= torch.std(c.points) * torch.sqrt(torch.tensor(2.0, dtype=dtype))
             self._constellation = c.points
 
             self._pam2qam = PAM2QAM(2 * self._num_bits_per_symbol)
 
         else:
+            # Complex-valued representation is used
+            # Number of streams is equal to number of transmitters
             self._num_streams = num_streams
+
+            # Create constellation or take the one provided
             c = Constellation.create_or_check_constellation(
-                constellation_type, num_bits_per_symbol, constellation, dtype=dtype)
+                                                        constellation_type,
+                                                        num_bits_per_symbol,
+                                                        constellation,
+                                                        dtype=dtype)
             self._constellation = c.points
             self._num_bits_per_symbol = c.num_bits_per_symbol
 
+        # Number of constellation symbols
         self._num_symbols = self._constellation.shape[0]
-        self._k = min(k, self._num_symbols ** self._num_streams)
+
+        # Number of best paths to keep
+        self._k = np.minimum(k, self._num_symbols**self._num_streams)
         if self._k < k:
             warnings.warn(f"KBestDetector: The provided value of k={k} is larger than the possible maximum number of paths. It has been set to k={self._k}.")
 
@@ -1040,37 +1058,51 @@ class KBestDetector(nn.Module):
         self._list2llr = value
 
     def _preprocessing(self, inputs):
+
         y, h, s = inputs
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', h.numpy())
+        # Convert to real-valued representation if desired
         if self._use_real_rep:
             y, h, s = complex2real_channel(y, h, s)
 
-        y, h = whiten_channel(y, h, s)
+        y, h = whiten_channel(y, h, s, return_s=False)
 
         h_norm = torch.sum(h.abs() ** 2, dim=1)
-        column_order = torch.argsort(h_norm, dim=-1, descending=True)
-        h = torch.gather(h, -1, column_order.unsqueeze(-2).expand(-1, -1, h.shape[-2]))
+        # column_order = torch.argsort(h_norm, dim=-1, descending=True)
+        flattened_tensor = h_norm.view(-1, h_norm.shape[-1])
+        column_order = torch.stack([
+            torch.tensor(sorted(range(flattened_tensor.shape[-1]), key=lambda x: (-flattened_tensor[i, x], x)))
+            for i in range(flattened_tensor.shape[0])
+        ]).reshape(h_norm.shape)
+        
+        h = gather_pytorch(h, column_order, axis=-1, batch_dims=1)
 
         q, r = torch.qr(h)
 
-        y = torch.squeeze(torch.matmul(q.transpose(-2, -1).conj(), y.unsqueeze(-1)), -1)
+        y = torch.squeeze(torch.matmul(q.conj().transpose(-1, -2), y.unsqueeze(-1)), -1)
 
         return y, r, column_order
 
     def _select_best_paths(self, dists, path_syms, path_inds):
         num_paths = path_syms.shape[1]
         k = min(num_paths, self._k)
-        dists, ind = torch.topk(-dists, k=k, dim=1, sorted=True)
+        dists, ind = torch.topk(-dists, k=k, sorted=True)
         dists = -dists
 
-        path_syms = torch.gather(path_syms, 1, ind.unsqueeze(-1).expand(-1, -1, path_syms.shape[-1]))
-        path_inds = torch.gather(path_inds, 1, ind.unsqueeze(-1).expand(-1, -1, path_inds.shape[-1]))
+        path_syms = gather_pytorch(path_syms, ind, axis=1, batch_dims=1)
+        path_inds = gather_pytorch(path_inds, ind, axis=1, batch_dims=1)
 
         return dists, path_syms, path_inds
 
     def _next_layer(self, y, r, dists, path_syms, path_inds, stream):
+
         batch_size = y.shape[0]
-        stream_ind = self._num_streams - 1 - stream
-        num_paths = self._num_paths[stream]
+
+        # Streams are processed in reverse order
+        stream_ind = self._num_streams-1-stream
+
+        # Current number of considered paths
+        num_paths = gather_pytorch(self._num_paths, stream)
 
         dists_o = dists.clone()
         path_syms_o = path_syms.clone()
@@ -1106,29 +1138,33 @@ class KBestDetector(nn.Module):
 
         dists, path_syms, path_inds = self._select_best_paths(dists, path_syms, path_inds)
 
-        dists = torch.transpose(dists_o, 1, 0)
-        updates = torch.transpose(dists, 1, 0)
+        tensor = dists_o.permute(1, 0)
+        updates = dists.permute(1, 0)
         indices = torch.arange(updates.shape[0], dtype=torch.int32).unsqueeze(-1)
-        dists = dists_o.scatter(1, indices, updates)
-
-        path_syms = torch.transpose(path_syms_o, 1, 2).contiguous()
-        updates = torch.transpose(path_syms, 1, 2).contiguous().view(-1, batch_size)
+        dists = tensor[tuple(indices.t())] + updates
+        dists = dists.permute(1, 0)
+        tensor = path_syms_o.permute(1, 2, 0)
+        updates = path_syms.permute(1, 2, 0).contiguous().view(-1, batch_size)
         indices = self._indices[stream, :self._num_paths[stream + 1] * (stream + 1)]
-        path_syms = path_syms_o.scatter(1, indices, updates)
-
-        path_inds = torch.transpose(path_inds_o, 1, 2).contiguous()
-        updates = torch.transpose(path_inds, 1, 2).contiguous().view(-1, batch_size)
-        path_inds = path_inds_o.scatter(1, indices, updates)
+        path_syms = tensor[tuple(indices.t())] + updates
+        path_syms = path_syms.permute(2, 0, 1)
+        tensor = path_inds_o.permute(1, 2, 0)
+        updates = path_inds.permute(1, 2, 0).contiguous().view(-1, batch_size)
+        path_inds = tensor[tuple(indices.t())] + updates
+        path_inds = path_inds.permute(2, 0, 1)
 
         return dists, path_syms, path_inds
 
     def _unsort(self, column_order, tensor, transpose=True):
-        unsort_inds = torch.argsort(column_order, dim=-1)
+        # Undo the column sorting
+        # If transpose=True, the unsorting is done along the last dimension
+        # Otherwise, sorting is done along the second-last index
+        unsort_inds = torch.argsort(column_order, axis=-1)
         if transpose:
-            tensor = tensor.transpose(1, -1)
-        tensor = torch.gather(tensor, -2, unsort_inds.unsqueeze(-2).expand(-1, -1, tensor.shape[-1]))
+            tensor = tensor.permute(0, 2, 1)
+        tensor = gather_pytorch(tensor, unsort_inds, axis=-2, batch_dims=1)
         if transpose:
-            tensor = tensor.transpose(1, -1)
+            tensor = tensor.permute(0, 2, 1)
         return tensor
 
     def _logits2llrs(self, logits, path_inds):
@@ -1137,30 +1173,95 @@ class KBestDetector(nn.Module):
         return llrs
 
     def forward(self, inputs):
+        for tensor in inputs:
+            input_shape = tensor.shape 
+            assert input_shape[-2] >= input_shape[-1], \
+                "The number of receive antennas cannot be smaller than the number of streams"
+        # Flatten the batch dimensions
         y, h, s = inputs
+        batch_shape = y.shape[:-1]
+        num_batch_dims = len(batch_shape)
+        if num_batch_dims > 1:
+            y = flatten_dims(y, num_batch_dims, 0)
+            h = flatten_dims(h, num_batch_dims, 0)
+            s = flatten_dims(s, num_batch_dims, 0)
+            inputs = (y,h,s)
+
+        # Initialization
+        # (i) (optional) Convert to real-valued representation
+        # (ii) Whiten channel
+        # (iii) Sort columns of H by decreasing column norm
+        # (iv) QR Decomposition of H
+        # (v) Project y onto Q'
         y, r, column_order = self._preprocessing(inputs)
+        batch_size = y.shape[0]
+        # Tensor to keep track of the aggregate distances of all paths
+        dists = torch.zeros([batch_size, self._k], dtype=get_real_dtype(y.dtype))
+        # Tensor to store constellation symbols of all paths
+        path_syms = torch.zeros([batch_size, self._k, self._num_streams], dtype=y.dtype)
+        # Tensor to store constellation symbol indices of all paths
+        path_inds = torch.zeros([batch_size, self._k, self._num_streams], dtype=torch.int32)
 
-        dists = torch.zeros([y.shape[0], 1], dtype=y.dtype, device=y.device)
-        path_syms = torch.zeros([y.shape[0], 1, 0], dtype=y.dtype, device=y.device)
-        path_inds = torch.zeros([y.shape[0], 1, 0], dtype=torch.int32, device=y.device)
+        # Sequential K-Best algorithm
+        for stream in range(0, self._num_streams):
+            dists, path_syms, path_inds = self._next_layer(y,
+                                                           r,
+                                                           dists,
+                                                           path_syms,
+                                                           path_inds,
+                                                           stream)
 
-        for stream in range(self._num_streams):
-            dists, path_syms, path_inds = self._next_layer(y, r, dists, path_syms, path_inds, stream)
+        # Reverse order as detection started with the last symbol first
+        path_syms = torch.flip(path_syms, dims=[-1])
+        path_inds = torch.flip(path_syms, dims=[-1])
 
-        path_syms = torch.squeeze(path_syms[:, 0, :])
-        path_inds = torch.squeeze(path_inds[:, 0, :])
-
-        logits = path_syms.unsqueeze(-1) * self._constellation.view(1, 1, -1)
-        logits = torch.sum(logits, dim=-2)
-
-        if self._output == "symbol":
-            return self._unsort(column_order, logits)
-
+        # Processing for hard-decisions
         if self._hard_out:
-            return self._unsort(column_order, path_inds, transpose=False)
+            path_inds = self._unsort(column_order, path_inds)
+            hard_dec = path_inds[:,0,:]
+
+            # Real-valued representation
+            if self._use_real_rep:
+                hard_dec = \
+                    self._pam2qam(hard_dec[...,:self._num_streams//2],
+                                  hard_dec[...,self._num_streams//2:])
+
+            # Hard decisions on bits
+            if self._output=="bit":
+                hard_dec = self._symbolinds2bits(hard_dec)
+
+            # Reshape batch dimensions
+            if num_batch_dims > 1:
+                hard_dec = split_dim(hard_dec, batch_shape, 0)
+
+            return hard_dec
+
+        # Processing for soft-decisions
         else:
-            llrs = self._logits2llrs(logits, path_inds)
-            return llrs
+            # Real-valued representation
+            if self._use_real_rep:
+                llr = self.list2llr([y, r, dists, path_inds, path_syms])
+                llr = self._unsort(column_order, llr, transpose=False)
+
+                # Combine LLRs from PAM symbols in the correct order
+                llr1 = llr[:,:self._num_streams//2]
+                llr2 = llr[:,self._num_streams//2:]
+                llr1 = llr1.unsqueeze(-1)
+                llr2 = llr2.unsqueeze(-1)
+                llr = torch.cat([llr1, llr2], -1)
+                llr = torch.reshape(llr, [-1, self._num_streams//2,
+                                   2*self._num_bits_per_symbol])
+
+            # Complex-valued representation
+            else:
+                llr = self.list2llr([y, r, dists, path_inds, path_syms])
+                llr = self._unsort(column_order, llr, transpose=False)
+
+            # Reshape batch dimensions
+            if num_batch_dims > 1:
+                llr = split_dim(llr, batch_shape, 0)
+
+            return llr
 
 class EPDetector(nn.Module):
     def __init__(self, output, num_bits_per_symbol, hard_out=False, l=10, beta=0.9, dtype=torch.complex64):
@@ -1348,7 +1449,7 @@ class MMSEPICDetector(nn.Module):
         self.num_iter = num_iter
         self.output = output
         self.epsilon = 1e-4
-        self.realdtype = dtype.real
+        self.realdtype = get_real_dtype(dtype)
         self.demapping_method = demapping_method
         self.hard_out = hard_out
 

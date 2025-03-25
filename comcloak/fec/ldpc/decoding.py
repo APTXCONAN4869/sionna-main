@@ -370,7 +370,7 @@ class LDPCBPDecoder(nn.Module):
         self._has_weights = False  # indicates if trainable weights exist
         if self._trainable:
             self._has_weights = True
-            self._edge_weights = nn.Parameter(torch.ones(self._num_edges, dtype=torch.float32))
+            self._edge_weights = nn.Parameter(torch.ones(self._num_edges, dtype=torch.float32), requires_grad = True)
 
         # track mutual information during decoding
         self._ie_c = 0

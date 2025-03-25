@@ -10,7 +10,7 @@ except ImportError as e:
 from comcloak.channel.tr38901 import models
 from comcloak import PI, SPEED_OF_LIGHT
 
-from .ofdm_test_module_z import flatten_last_dims, expand_to_rank, matrix_inv
+from comcloak.utils import flatten_last_dims, expand_to_rank, matrix_inv
 from comcloak.ofdm import ResourceGrid, RemoveNulledSubcarriers
 import numpy as np
 from scipy.special import jv
@@ -148,6 +148,7 @@ class BaseChannelEstimator(ABC, nn.Module):
             torch.tensor(sorted(range(flattened_tensor.shape[-1]), key=lambda x: (-flattened_tensor[i, x], x)))
             for i in range(flattened_tensor.shape[0])
         ]).reshape(mask.shape)
+
 
         # # Custom stable sort: For each "batch" in the first two dimensions
         # # Sort by value in descending order and by index for stability

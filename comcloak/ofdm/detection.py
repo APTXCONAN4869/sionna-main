@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from comcloak.ofdm import RemoveNulledSubcarriers
-from comcloak.ofdm.ofdm_test_module_z import Constellation, flatten_dims, split_dim, flatten_last_dims, expand_to_rank
+from comcloak.utils import  flatten_dims, split_dim, flatten_last_dims, expand_to_rank
+from comcloak.mapping import Constellation
 from comcloak.mimo import MaximumLikelihoodDetectorWithPrior as MaximumLikelihoodDetectorWithPrior_
 from comcloak.mimo import MaximumLikelihoodDetector as MaximumLikelihoodDetector_
 from comcloak.mimo import LinearDetector as LinearDetector_
@@ -100,7 +101,7 @@ class OFDMDetector(nn.Module):
         ### Compute the interference covariance matrix ###
         ##################################################
         # Covariance of undesired transmitters
-        s_inf = torch.matmul(h_dt_undesired, h_dt_undesired.transpose(-1, -2))
+        s_inf = torch.matmul(h_dt_undesired, h_dt_undesired.conj().transpose(-1, -2))
 
         # Thermal noise
         s_no = torch.diag_embed(no_dt)

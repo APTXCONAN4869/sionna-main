@@ -282,7 +282,7 @@ class PUSCHReceiver(nn.Module):
             h_hat = h
             err_var = torch.tensor(0, dtype=get_real_dtype(h_hat.dtype))
         else:
-            h_hat,err_var = self._channel_estimator([y, no])
+            h_hat, err_var = self._channel_estimator([y, no])
 
         # MIMO Detection
         llr = self._mimo_detector([y, h_hat, err_var, no])

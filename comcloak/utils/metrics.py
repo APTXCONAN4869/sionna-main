@@ -61,6 +61,28 @@ def count_block_errors(b, b_hat):
     errors = errors.to(torch.int64)
     return errors.sum().item()
 
+def compute_ser(s, s_hat):
+    """Computes the symbol error rate (SER) between two integer tensors.
+
+    Input
+    -----
+        s : tf.int
+            A tensor of arbitrary shape filled with integers indicating
+            the symbol indices.
+
+        s_hat : tf.int
+            A tensor of the same shape as ``s`` filled with integers indicating
+            the estimated symbol indices.
+
+    Output
+    ------
+        : tf.float64
+            A scalar, the SER.
+    """
+    ser = torch.not_equal(s, s_hat)
+    ser = torch.tensor(ser, dtype=torch.float64) # torch.float64 to suport large batch-sizes
+    return torch.mean(ser)
+
 def compute_ber(b, b_hat):
     """Computes the bit error rate (BER) between two binary tensors.
 

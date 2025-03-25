@@ -11,8 +11,8 @@ import sys
 sys.path.insert(0, 'D:\sionna-main')
 # Assuming these functions are defined elsewhere
 # from comcloak.ofdm import pilot_pattern_z, ofdm_test_module_z
-from .pilot_pattern_z import PilotPattern, EmptyPilotPattern, KroneckerPilotPattern
-from .ofdm_test_module_z import flatten_last_dims, flatten_dims, split_dim
+from .pilot_pattern import PilotPattern, EmptyPilotPattern, KroneckerPilotPattern
+from comcloak.utils import flatten_last_dims, flatten_dims, split_dim
 
 # def gather_pytorch(input_data, indices=None, batch_dims=0, axis=0):
 #     if batch_dims == 0:
