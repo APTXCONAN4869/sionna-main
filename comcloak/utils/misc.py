@@ -30,11 +30,24 @@ class BinarySource(nn.Module):
         else:
             size = inputs
         if self._seed is not None:
-            return torch.randint(0, 2, size = size, generator=self._rng, dtype=torch.int32).to(self._dtype)
-        else:
-            # return torch.randint(0, 2, size = size, dtype=torch.int32).to(self._dtype)
+            # return torch.randint(0, 2, size = size, generator=self._rng, dtype=torch.int32).to(self._dtype)
+
             # 设置随机数生成器
             rng = np.random.default_rng(seed=12345)  # 你可以根据需要设置种子
+
+
+            # 使用 randint 生成随机整数
+            random_integers = rng.integers(low=0, high=2, size=size, dtype=np.int32)
+
+            # 转换数据类型
+            result = random_integers.astype(np.float32)  # self._dtype 在此示例中假设为 float32
+            return torch.tensor(result,  dtype=self._dtype)
+        else:
+            # return torch.randint(0, 2, size = size, dtype=torch.int32).to(self._dtype)
+
+            # 设置随机数生成器
+            rng = np.random.default_rng(seed=12345)  # 你可以根据需要设置种子
+
 
             # 使用 randint 生成随机整数
             random_integers = rng.integers(low=0, high=2, size=size, dtype=np.int32)
@@ -233,6 +246,7 @@ def complex_normal(shape, var=1.0, dtype=torch.complex64):
     stddev = torch.sqrt(torch.tensor(var_dim, dtype=get_real_dtype(dtype)))
  
     # Generate complex Gaussian noise with the right variance
+    np.random.seed(1)
     xr = torch.tensor(np.random.normal(loc=0.0, scale=stddev, 
                       size=shape),
                       dtype=get_real_dtype(dtype))
@@ -344,6 +358,7 @@ def sim_ber(mc_fun,
             target_ber=None,
             target_bler=None,
             early_stop=True,
+            graph_mode=None,
             distribute=None,
             verbose=True,
             forward_keyboard_interrupt=True,
@@ -367,13 +382,13 @@ def sim_ber(mc_fun,
         ``ebno_db``. If ``soft_estimates`` is True, `b_hat` is interpreted as
         logit.
 
-    ebno_dbs: tf.float32
+    ebno_dbs: torch.float32
         A tensor containing SNR points to be evaluated.
 
-    batch_size: tf.int32
+    batch_size: torch.int32
         Batch-size for evaluation.
 
-    max_mc_iter: tf.int32
+    max_mc_iter: torch.int32
         Maximum number of Monte-Carlo iterations per SNR point.
 
     soft_estimates: bool
@@ -381,20 +396,20 @@ def sim_ber(mc_fun,
         is interpreted as logit and an additional hard-decision is applied
         internally.
 
-    num_target_bit_errors: tf.int32
+    num_target_bit_errors: torch.int32
         Defaults to `None`. Target number of bit errors per SNR point until
         the simulation continues to next SNR point.
 
-    num_target_block_errors: tf.int32
+    num_target_block_errors: torch.int32
         Defaults to `None`. Target number of block errors per SNR point
         until the simulation continues
 
-    target_ber: tf.float32
+    target_ber: torch.float32
         Defaults to `None`. The simulation stops after the first SNR point
         which achieves a lower bit error rate as specified by ``target_ber``.
         This requires ``early_stop`` to be `True`.
 
-    target_bler: tf.float32
+    target_bler: torch.float32
         Defaults to `None`. The simulation stops after the first SNR point
         which achieves a lower block error rate as specified by ``target_bler``.
         This requires ``early_stop`` to be `True`.
@@ -450,7 +465,7 @@ def sim_ber(mc_fun,
         immediately. For `sim_ber.CALLBACK_CONTINUE` continues with
         the simulation.
 
-    dtype: tf.complex64
+    dtype: torch.complex64
         Datatype of the callable ``mc_fun`` to be used as input/output.
 
     Output
@@ -458,10 +473,10 @@ def sim_ber(mc_fun,
     (ber, bler) :
         Tuple:
 
-    ber: tf.float32
+    ber: torch.float32
         The bit-error rate.
 
-    bler: tf.float32
+    bler: torch.float32
         The block-error rate.
 
     Raises
@@ -470,12 +485,12 @@ def sim_ber(mc_fun,
         If ``soft_estimates`` is not bool.
 
     AssertionError
-        If ``dtype`` is not `tf.complex`.
+        If ``dtype`` is not `torch.complex`.
 
     Note
     ----
     This function is implemented based on tensors to allow
-    full compatibility with tf.function(). However, to run simulations
+    full compatibility with torch.jit.script. However, to run simulations
     in graph mode, the provided ``mc_fun`` must use the `@tf.function()`
     decorator.
 
@@ -507,11 +522,11 @@ def sim_ber(mc_fun,
             end_str = "\n"
         else:
             # calculate intermediate ber / bler
-            ber_np = (torch.tensor(bit_errors[idx_snr], torch.float64)
-                        / torch.tensor(nb_bits[idx_snr], torch.float64)).numpy()
+            ber_np = (torch.tensor(bit_errors[idx_snr], dtype=torch.float64)
+                        / torch.tensor(nb_bits[idx_snr], dtype=torch.float64)).numpy()
             ber_np = np.nan_to_num(ber_np) # avoid nan for first point
-            bler_np = (torch.tensor(block_errors[idx_snr], torch.float64)
-                        / torch.tensor(nb_blocks[idx_snr], torch.float64)).numpy()
+            bler_np = (torch.tensor(block_errors[idx_snr], dtype=torch.float64)
+                        / torch.tensor(nb_blocks[idx_snr], dtype=torch.float64)).numpy()
             bler_np = np.nan_to_num(bler_np) # avoid nan for first point
 
             # load statuslevel
@@ -525,10 +540,10 @@ def sim_ber(mc_fun,
             row_text = [str(np.round(ebno_dbs[idx_snr].numpy(), 3)),
                         f"{ber_np:.4e}",
                         f"{bler_np:.4e}",
-                        np.round(bit_errors[idx_snr].numpy(), 0),
-                        np.round(nb_bits[idx_snr].numpy(), 0),
-                        np.round(block_errors[idx_snr].numpy(), 0),
-                        np.round(nb_blocks[idx_snr].numpy(), 0),
+                        np.round(bit_errors[idx_snr].detach().numpy(), 0),
+                        np.round(nb_bits[idx_snr].detach().numpy(), 0),
+                        np.round(block_errors[idx_snr].detach().numpy(), 0),
+                        np.round(nb_blocks[idx_snr].detach().numpy(), 0),
                         np.round(rt, 1),
                         status_txt]
 
@@ -536,15 +551,12 @@ def sim_ber(mc_fun,
         print("{: >9} |{: >11} |{: >11} |{: >12} |{: >12} |{: >13} |{: >12} |{: >12} |{: >10}".format(*row_text), end=end_str)
 
     # distributed execution should not be done in Eager mode
-    # XLA mode seems to have difficulties with TF2.13
-    # @tf.function(jit_compile=False)
+    # @torch.jit.script
     def _run_distributed(strategy, mc_fun, batch_size, ebno_db):
-        # use tf.distribute to execute on parallel devices (=replicas)
-        outputs_rep = strategy.run(mc_fun,
-                                   args=(batch_size, ebno_db))
-        # copy replicas back to single device
-        b = strategy.gather(outputs_rep[0], axis=0)
-        b_hat = strategy.gather(outputs_rep[1], axis=0)
+        outputs_rep = mc_fun(batch_size, ebno_db)
+        b = outputs_rep[0]
+
+        b_hat = outputs_rep[1]
         return b, b_hat
 
      # init table headers
@@ -587,36 +599,58 @@ def sim_ber(mc_fun,
         graph_mode="default" # applies default graph mode
     assert isinstance(graph_mode, str), "graph_mode must be str."
 
-    
+    if graph_mode=="default":
+        pass # nothing to do
 
-    # support multi-device simulations by using the tf.distribute package
+    # support multi-device simulations by using the torch.distribute package
     if distribute is None: # disabled per default
         run_multigpu = False
     # use strategy if explicitly provided
-    elif isinstance(distribute, tf.distribute.Strategy):
+    elif isinstance(distribute, torch.nn.parallel.DistributedDataParallel):
         run_multigpu = True
-        strategy = distribute # distribute is already a tf.distribute.strategy
+        strategy = distribute  # DistributedDataParallel is already provided
+
     else:
         run_multigpu = True
-        # use all available gpus
-        if distribute=="all":
-            gpus = tf.config.list_logical_devices('GPU')
-        # mask active GPUs if indices are provided
+
+        # Use all available GPUs
+        if distribute == "all":
+            gpus = torch.cuda.device_count()
+            devices = [f'cuda:{i}' for i in range(gpus)]
+
+        # Use specific GPU indices
         elif isinstance(distribute, (tuple, list)):
-            devices = [f"cuda:{i}" for i in distribute if i < torch.cuda.device_count()]
+            gpus = torch.cuda.device_count()
+            devices = [f'cuda:{i}' for i in distribute if i < gpus]
+
         else:
             raise ValueError("Unknown value for distribute.")
-        max_mc_iter = int(np.ceil(max_mc_iter / len(devices)))
-        strategy = torch.distributed
 
-    ebno_dbs = ebno_dbs.to(torch.float32)
+        # Reduce unnecessary device placement logging if verbose
+        if verbose:
+            print("Setting torch.backends.cudnn.benchmark to True for performance.")
+        torch.backends.cudnn.benchmark = True
+
+        # Create strategy
+        if len(devices) > 1:
+            strategy = torch.nn.DataParallel  # DataParallel for multi-GPU
+        else:
+            devices = devices[0]  # Single GPU
+    # Adjust max_mc_iter based on number of replicas
+    if run_multigpu:
+        num_replicas = len(devices) if distribute != "all" else torch.cuda.device_count()
+        max_mc_iter = int(np.ceil(max_mc_iter / num_replicas))
+        print(f"Distributing simulation across {num_replicas} devices.")
+        print(f"Reducing max_mc_iter to {max_mc_iter}.")
+    ebno_dbs = torch.tensor(ebno_dbs, dtype=torch.float32)
+    batch_size = torch.tensor(batch_size, dtype=torch.int32)
     num_points = len(ebno_dbs)
-    bit_errors, block_errors, nb_bits, nb_blocks = (
-        torch.zeros(num_points, dtype=torch.int64),
-        torch.zeros(num_points, dtype=torch.int64),
-        torch.zeros(num_points, dtype=torch.int64),
-        torch.zeros(num_points, dtype=torch.int64),
-    )
+    #nn.Parameter don't surppport int type
+    bit_errors = nn.Parameter(torch.zeros([num_points], dtype=torch.float32))
+    block_errors = nn.Parameter(torch.zeros([num_points], dtype=torch.float32))
+    nb_bits = nn.Parameter(torch.zeros([num_points], dtype=torch.float32))
+    nb_blocks = nn.Parameter(torch.zeros([num_points], dtype=torch.float32))
+    
     
     # track status of simulation (early termination etc.)
     status = np.zeros(num_points)
@@ -626,9 +660,9 @@ def sim_ber(mc_fun,
 
     # ensure num_target_errors is a tensor
     if num_target_bit_errors is not None:
-        num_target_bit_errors = torch.tensor(num_target_bit_errors, torch.int64)
+        num_target_bit_errors = torch.tensor(num_target_bit_errors, dtype=torch.int64)
     if num_target_block_errors is not None:
-        num_target_block_errors = torch.tensor(num_target_block_errors, torch.int64)
+        num_target_block_errors = torch.tensor(num_target_block_errors, dtype=torch.int64)
 
     try:
         for i in range(num_points):
@@ -639,7 +673,10 @@ def sim_ber(mc_fun,
                 
                 if run_multigpu:
                     # Placeholder for PyTorch distributed code (could use DDP, RPC, etc.)
-                    b, b_hat = mc_fun(batch_size, ebno_dbs[i].to(devices[ii % len(devices)]))
+                    b, b_hat = _run_distributed(strategy,
+                                                mc_fun,
+                                                batch_size,
+                                                ebno_dbs[i])
                 else:
                     outputs = mc_fun(batch_size=batch_size, ebno_db=ebno_dbs[i])
                     # assume first and second return value is b and b_hat
@@ -655,18 +692,21 @@ def sim_ber(mc_fun,
                 block_e = count_block_errors(b, b_hat)
 
                 # count total number of bits
-                bit_n = tf.size(b)
-                block_n = tf.size(b[...,-1])
+                bit_n = b.numel()
+                block_n = b[...,-1].numel()
 
                 # update variables
-                bit_errors = tf.tensor_scatter_nd_add(  bit_errors, [[i]],
-                                                    tf.cast([bit_e], tf.int64))
-                block_errors = tf.tensor_scatter_nd_add(  block_errors, [[i]],
-                                                tf.cast([block_e], tf.int64))
-                nb_bits = tf.tensor_scatter_nd_add( nb_bits, [[i]],
-                                                    tf.cast([bit_n], tf.int64))
-                nb_blocks = tf.tensor_scatter_nd_add( nb_blocks, [[i]],
-                                                tf.cast([block_n], tf.int64))
+                # a leaf Variable that requires grad doesn't allow to
+                #  be used in an in-place operation
+                bit_errors = bit_errors.clone()
+                block_errors = block_errors.clone()
+                nb_bits = nb_bits.clone()
+                nb_blocks = nb_blocks.clone()
+
+                bit_errors[tuple([[i]])] += torch.tensor([bit_e], dtype=torch.int64)
+                block_errors[tuple([[i]])] += torch.tensor([block_e], dtype=torch.int64)
+                nb_bits[tuple([[i]])] += torch.tensor([bit_n], dtype=torch.int64)
+                nb_blocks[tuple([[i]])] += torch.tensor([block_n], dtype=torch.int64)
 
                 cb_state = sim_ber.CALLBACK_CONTINUE
                 if callback is not None:
@@ -699,7 +739,7 @@ def sim_ber(mc_fun,
 
                 # bit-error based stopping cond.
                 if num_target_bit_errors is not None:
-                    if tf.greater_equal(bit_errors[i], num_target_bit_errors):
+                    if torch.greater_equal(bit_errors[i], num_target_bit_errors):
                         status[i] = 3 # change internal status for summary
                         # stop runtime timer
                         runtime[i] = time.perf_counter() - runtime[i]
@@ -707,7 +747,7 @@ def sim_ber(mc_fun,
 
                 # block-error based stopping cond.
                 if num_target_block_errors is not None:
-                    if tf.greater_equal(block_errors[i],
+                    if torch.greater_equal(block_errors[i],
                                         num_target_block_errors):
                         # stop runtime timer
                         runtime[i] = time.perf_counter() - runtime[i]
@@ -718,8 +758,9 @@ def sim_ber(mc_fun,
                 if iter_count==max_mc_iter-1: # all iterations are done
                     # stop runtime timer
                     runtime[i] = time.perf_counter() - runtime[i]
-                    status[i] = 1
+                    status[i] = 1 # change internal status for summary
 
+            # print results again AFTER last iteration / early stop (new status)
             if verbose:
                 _print_progress(is_final=True,
                                 idx_snr=i,
@@ -771,22 +812,18 @@ def sim_ber(mc_fun,
               f"@ EbNo = {ebno_dbs[i].numpy()} dB.")
         # overwrite remaining BER / BLER positions with -1
         for idx in range(i+1, num_points):
-            bit_errors = tf.tensor_scatter_nd_update( bit_errors, [[idx]],
-                                                    tf.cast([-1], tf.int64))
-            block_errors = tf.tensor_scatter_nd_update( block_errors, [[idx]],
-                                                    tf.cast([-1], tf.int64))
-            nb_bits = tf.tensor_scatter_nd_update( nb_bits, [[idx]],
-                                                    tf.cast([1], tf.int64))
-            nb_blocks = tf.tensor_scatter_nd_update( nb_blocks, [[idx]],
-                                                    tf.cast([1], tf.int64))
+            bit_errors[tuple([[idx]])] += torch.tensor([-1], dtype=torch.int64)
+            block_errors[tuple([[idx]])] += torch.tensor([-1], dtype=torch.int64)
+            nb_bits[tuple([[idx]])] += torch.tensor([1], dtype=torch.int64)
+            nb_blocks[tuple([[idx]])] += torch.tensor([1], dtype=torch.int64)
 
     # calculate BER / BLER
-    ber = tf.cast(bit_errors, tf.float64) / tf.cast(nb_bits, tf.float64)
-    bler = tf.cast(block_errors, tf.float64) / tf.cast(nb_blocks, tf.float64)
+    ber = torch.tensor(bit_errors, dtype=torch.float64) / torch.tensor(nb_bits, dtype=torch.float64)
+    bler = torch.tensor(block_errors, dtype=torch.float64) / torch.tensor(nb_blocks, dtype=torch.float64)
 
     # replace nans (from early stop)
-    ber = tf.where(tf.math.is_nan(ber), tf.zeros_like(ber), ber)
-    bler = tf.where(tf.math.is_nan(bler), tf.zeros_like(bler), bler)
+    ber = torch.where(torch.isnan(ber), torch.zeros_like(ber), ber)
+    bler = torch.where(torch.isnan(bler), torch.zeros_like(bler), bler)
 
     return ber, bler
 sim_ber.CALLBACK_CONTINUE = None
@@ -797,7 +834,7 @@ def log2(x):
     # pylint: disable=C0301
     """Pytorch implementation of NumPy's `log2` function.
 
-    Simple extension to `tf.experimental.numpy.log2`
+    Simple extension to `torch.experimental.numpy.log2`
     which casts the result to the `dtype` of the input.
     For more details see the `TensorFlow <https://www.tensorflow.org/api_docs/python/tf/experimental/numpy/log2>`_ and `NumPy <https://numpy.org/doc/1.16/reference/generated/numpy.log2.html>`_ documentation.
     """

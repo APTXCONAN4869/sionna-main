@@ -1089,7 +1089,7 @@ class KBestDetector(Layer):
     def _preprocessing(self, inputs):
 
         y, h, s = inputs
-
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', h.numpy())
         # Convert to real-valued representation if desired
         if self._use_real_rep:
             y, h, s = complex2real_channel(y, h, s)
@@ -1100,6 +1100,7 @@ class KBestDetector(Layer):
         # Order columns of H in order of decreasing norm
         h_norm = tf.reduce_sum(tf.abs(h)**2, axis=1)
         column_order = tf.argsort(h_norm, axis=-1, direction="DESCENDING")
+        
         h = tf.gather(h, column_order, axis=-1, batch_dims=1)
 
         # Compute QR decomposition of sorted channel

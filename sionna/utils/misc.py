@@ -86,7 +86,6 @@ def ebnodb2no(ebno_db, num_bits_per_symbol, coderate, resource_grid=None):
 
     return no
 
-
 def hard_decisions(llr):
     """Transforms LLRs into hard decisions.
 
@@ -107,7 +106,6 @@ def hard_decisions(llr):
 
     return tf.cast(tf.math.greater(llr, zero), dtype=llr.dtype)
 
-
 def log10(x):
     # pylint: disable=C0301
     """TensorFlow implementation of NumPy's `log10` function.
@@ -118,7 +116,6 @@ def log10(x):
     """
     return tf.cast(_log10(x), x.dtype)
 
-
 def log2(x):
     # pylint: disable=C0301
     """TensorFlow implementation of NumPy's `log2` function.
@@ -128,7 +125,6 @@ def log2(x):
     For more details see the `TensorFlow <https://www.tensorflow.org/api_docs/python/tf/experimental/numpy/log2>`_ and `NumPy <https://numpy.org/doc/1.16/reference/generated/numpy.log2.html>`_ documentation.
     """
     return tf.cast(_log2(x), x.dtype)
-
 
 class BinarySource(Layer):
     """BinarySource(dtype=tf.float32, seed=None, **kwargs)
@@ -163,35 +159,33 @@ class BinarySource(Layer):
 
     def call(self, inputs):
         if self._seed is not None:
-            return tf.cast(self._rng.uniform(inputs, 0, 2, tf.int32),
-                           dtype=super().dtype)
+            # return tf.cast(self._rng.uniform(inputs, 0, 2, tf.int32),
+            #                dtype=super().dtype)
 
-            # # 设置随机数生成器
-            # rng = np.random.default_rng(seed=12345)  # 你可以根据需要设置种子
+            # 设置随机数生成器
+            rng = np.random.default_rng(seed=12345)  # 你可以根据需要设置种子
 
-            # # 使用 randint 生成随机整数
-            # inputs_numpy = tf.convert_to_tensor(inputs)
-            # random_integers = rng.integers(low=0, high=2, size=inputs_numpy, dtype=np.int32)
+            # 使用 randint 生成随机整数
+            inputs_numpy = tf.convert_to_tensor(inputs)
+            random_integers = rng.integers(low=0, high=2, size=inputs_numpy, dtype=np.int32)
 
-            # # 转换数据类型
-            # result = random_integers.astype(np.float32)  # self._dtype 在此示例中假设为 float32
-            # return tf.cast(result,  dtype=super().dtype)
+            # 转换数据类型
+            result = random_integers.astype(np.float32)  # self._dtype 在此示例中假设为 float32
+            return tf.cast(result,  dtype=super().dtype)
         else:
-            return tf.cast(tf.random.uniform(inputs, 0, 2, tf.int32),
-                          dtype=super().dtype) 
+            # return tf.cast(tf.random.uniform(inputs, 0, 2, tf.int32),
+            #               dtype=super().dtype) 
 
-            # # 设置随机数生成器
-            # rng = np.random.default_rng(seed=12345)  # 你可以根据需要设置种子
+            # 设置随机数生成器
+            rng = np.random.default_rng(seed=12345)  # 你可以根据需要设置种子
 
-            # # 使用 randint 生成随机整数
-            # inputs_numpy = tf.convert_to_tensor(inputs)
-            # random_integers = rng.integers(low=0, high=2, size=inputs_numpy, dtype=np.int32)
+            # 使用 randint 生成随机整数
+            inputs_numpy = tf.convert_to_tensor(inputs)
+            random_integers = rng.integers(low=0, high=2, size=inputs_numpy, dtype=np.int32)
 
-            # # 转换数据类型
-            # result = random_integers.astype(np.float32)  # self._dtype 在此示例中假设为 float32
-            # return tf.cast(result,  dtype=super().dtype)
-
-
+            # 转换数据类型
+            result = random_integers.astype(np.float32)  # self._dtype 在此示例中假设为 float32
+            return tf.cast(result,  dtype=super().dtype)
 
 class SymbolSource(Layer):
     # pylint: disable=line-too-long
@@ -420,7 +414,6 @@ class PAMSource(SymbolSource):
                          seed=seed,
                          dtype=dtype,
                          **kwargs)
-
 
 def sim_ber(mc_fun,
             ebno_dbs,
@@ -952,6 +945,7 @@ def complex_normal(shape, var=1.0, dtype=tf.complex64):
     stddev = tf.sqrt(var_dim)
 
     # Generate complex Gaussian noise with the right variance
+    np.random.seed(1)
     xr = tf.convert_to_tensor(np.random.normal(loc=0.0, scale=stddev, 
                       size=shape),
                       dtype=dtype.real_dtype)

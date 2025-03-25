@@ -1,28 +1,51 @@
 import torch
 from typing import Callable, List
 
-def gather_pytorch(input_data, indices=None, batch_dims=0, axis=0):
-    input_data = torch.tensor(input_data)
-    indices = torch.tensor(indices)
-    if axis == None:
-        axis =0 
-    if batch_dims == 0:
-        if axis < 0:
-            axis = len(input_data.shape) + axis
-        data = torch.index_select(input_data, axis, indices.flatten())
-        shape_input = list(input_data.shape)
-        # shape_ = delete(shape_input, axis)
-        # 连接列表
-        shape_output = shape_input[:axis] + \
-            list(indices.shape) + shape_input[axis + 1:]
-        data_output = data.reshape(shape_output)
-        return data_output
-    else:
-        data_output = []
-        for data,ind in zip(input_data, indices):
-            r = gather_pytorch(data, ind, batch_dims=batch_dims-1)
-            data_output.append(r)
-        return torch.stack(data_output)
+# def gather_pytorch(input_data, indices=None, batch_dims=0, axis=0):
+#     input_data = torch.tensor(input_data)
+#     indices = torch.tensor(indices)
+#     if axis == None:
+#         axis =0 
+#     if batch_dims == 0:
+#         if axis < 0:
+#             axis = len(input_data.shape) + axis
+#         data = torch.index_select(input_data, axis, indices.flatten())
+#         shape_input = list(input_data.shape)
+#         # shape_ = delete(shape_input, axis)
+#         # 连接列表
+#         shape_output = shape_input[:axis] + \
+#             list(indices.shape) + shape_input[axis + 1:]
+#         data_output = data.reshape(shape_output)
+#         return data_output
+#     else:
+#         data_output = []
+#         for data,ind in zip(input_data, indices):
+#             r = gather_pytorch(data, ind, batch_dims=batch_dims-1)
+#             data_output.append(r)
+#         return torch.stack(data_output)
+
+# def gather_pytorch2(input_data, indices=None, batch_dims=0, axis=0):
+#     input_data = torch.tensor(input_data)
+#     indices = torch.tensor(indices)
+#     if axis == None:
+#         axis =0 
+#     if batch_dims == 0:
+#         if axis < 0:
+#             axis = len(input_data.shape) + axis
+#         data = torch.index_select(input_data, axis, indices.flatten())
+#         shape_input = list(input_data.shape)
+#         # shape_ = delete(shape_input, axis)
+#         # 连接列表
+#         shape_output = shape_input[:axis] + \
+#             list(indices.shape)[batch_dims:] + shape_input[axis + 1:]
+#         data_output = data.reshape(shape_output)
+#         return data_output
+#     else:
+#         data_output = []
+#         for data,ind in zip(input_data, indices):
+#             r = gather_pytorch2(data, ind, batch_dims=batch_dims-1)
+#             data_output.append(r)
+#         return torch.stack(data_output)
 
 def gather_nd_pytorch(params, indices):
     '''
@@ -93,6 +116,49 @@ def ensure_shape(tensor: torch.Tensor, expected_shape: tuple):
 def assert_type(tensor, expected_type):
     assert tensor.dtype == expected_type, f"Expected type {expected_type}, but got {tensor.dtype}"
 
+def arguments_check(params, indices, axis, batch_dims):
+    if not (isinstance(params, torch.Tensor) and isinstance(indices, (int, torch.Tensor)) and isinstance(axis, int) and isinstance(batch_dims, int)):
+        raise TypeError(
+            f'my_gather() received an invalid combination of arguments - got {(type(params).__name__, type(indices).__name__, type(axis).__name__, type(batch_dims).__name__, )}, but expected one of:\n\
+            *(Tensor params, int indices, int axis, int batch_dims)\n\
+            *(Tensor params, Tensor indices, int axis, int batch_dims).'
+        )
+    if not -params.dim() <= axis <= params.dim()-1:
+        raise ValueError(
+            f'Expected axis in the range [{-params.dim()}, {params.dim()-1}], but got {axis}.'
+        )
+    if isinstance(indices, int):
+        return
+    if not -indices.dim() <= batch_dims <= indices.dim():
+        raise ValueError(
+            f'Expected batch_dims in the range [{-indices.dim()}, {indices.dim()-1}], but got {batch_dims}.'
+        )
+    axis = axis if axis >= 0 else params.dim()+axis
+    batch_dims = batch_dims if batch_dims >= 0 else indices.dim()+batch_dims
+    if not batch_dims <= axis:
+        raise ValueError(
+            f'batch_dims ({batch_dims}) must be less than or equal to axis ({axis}).'
+        )
+    for index in range(batch_dims):
+        if params.shape[index] != indices.shape[index]:
+            raise ValueError(
+                f'params.shape[{index}]: {params.shape[index]} should be equal to indices.shape[{index}]: {indices.shape[index]}.'
+            )
+
+def gather_pytorch(params: torch.Tensor, indices: int | torch.Tensor, axis: int = 0, batch_dims: int = 0):
+    if axis == 0:
+        batch_dims = 0
+    arguments_check(params, indices, axis, batch_dims)
+    axis = axis if axis >= 0 else params.dim()+axis
+    if isinstance(indices, int):
+        return params.select(dim=axis, index=indices)
+    else:
+        batch_dims = batch_dims if batch_dims >= 0 else indices.dim()+batch_dims
+        output_shape = params.shape[:axis] + indices.shape[batch_dims:] + params.shape[axis+1:]
+        output = params.index_select(axis, indices.reshape((-1,))).unflatten(axis, indices.shape)
+        for index in range(batch_dims):
+            output = output.diagonal(dim1=0, dim2=axis-index)
+        return output.permute([index+len(output_shape)-batch_dims for index in range(batch_dims)]+[index for index in range(len(output_shape)-batch_dims)])
 
 class RaggedTensor:
     """

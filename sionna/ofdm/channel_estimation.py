@@ -181,7 +181,7 @@ class BaseChannelEstimator(ABC, Layer):
         # [batch_size, num_rx, num_rx_ant, num_tx, num_streams,...
         #  ..., num_pilot_symbols]
         y_pilots = tf.gather(y_eff_flat, self._pilot_ind, axis=-1)
-        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', self._pilot_ind.numpy())
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', self._pilot_ind.numpy())
         # print('indice:\n', self._pilot_ind)
         # print(tf.where(y_pilots != 0 + 0j))
         # Compute LS channel estimates

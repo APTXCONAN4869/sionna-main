@@ -149,7 +149,6 @@ class TestSymbolMaximumLikelihoodDetector(unittest.TestCase):
                     test_logits = max_values.numpy()
                     self.assertTrue(np.allclose(test_logits, ref_maxlog, atol=1e-5))
 
-
 class TestMaximumLikelihoodDetectorWithPrior(unittest.TestCase):
 
     def test_vecs_ind(self):
@@ -304,7 +303,6 @@ class TestMaximumLikelihoodDetectorWithPrior(unittest.TestCase):
                     max_values, _ = test_logits
                     test_logits = max_values.numpy()
                     self.assertTrue(np.allclose(test_logits, ref_maxlog, atol=1e-5))
-
 
 
 if __name__ == '__main__':

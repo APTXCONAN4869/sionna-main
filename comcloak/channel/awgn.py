@@ -3,16 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from comcloak.utils import expand_to_rank,complex_normal
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 from comcloak.constants import GLOBAL_SEED_NUMBER
 
 # import tensorflow as tf
 # from tensorflow.keras.layers import Layer
-from comcloak.utils import expand_to_rank,complex_normal
+# from comcloak.utils import expand_to_rank,complex_normal
 
 class AWGN(nn.Module):
     r"""AWGN(dtype=torch.complex64, **kwargs)

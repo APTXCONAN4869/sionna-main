@@ -548,8 +548,10 @@ class List2LLRSimple(Layer, List2LLR):
         path_inds = insert_dims(path_inds, 2, axis=-1)
         b0 = tf.equal(path_inds, self._c0)
         b1 = tf.equal(path_inds, self._c1)
-        b0 = tf.function(tf.reduce_any, jit_compile=True)(b0, axis=-2)
-        b1 = tf.function(tf.reduce_any, jit_compile=True)(b1, axis=-2)
+        # b0 = tf.function(tf.reduce_any, jit_compile=True)(b0, axis=-2)
+        # b1 = tf.function(tf.reduce_any, jit_compile=True)(b1, axis=-2)
+        b0 = tf.reduce_any(b0, axis=-2)
+        b1 = tf.reduce_any(b1, axis=-2)
 
         # Compute distances for all bits in all paths, set distance to inf
         # if the bit does not have the correct value

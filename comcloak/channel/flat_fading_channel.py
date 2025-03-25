@@ -95,7 +95,7 @@ class ApplyFlatFadingChannel(nn.Module):
         x = x.unsqueeze(-1)
         y = torch.matmul(h, x)
         y = y.squeeze(-1)
-
+        no = torch.tensor(no, dtype=torch.float32)
         if self._add_awgn:
             no = no.to(y.device)  # 确保no在同一个设备上
             y = self._awgn((y,no))

@@ -5,7 +5,7 @@
 """Class for simulating Rayleigh block fading"""
 
 import tensorflow as tf
-
+import numpy as np
 from . import ChannelModel
 
 class RayleighBlockFading(ChannelModel):
@@ -94,24 +94,25 @@ class RayleighBlockFading(ChannelModel):
 
         # Fading coefficients
         std = tf.cast(tf.sqrt(0.5), dtype=self._dtype.real_dtype)
-        h_real = tf.random.normal(shape=[   batch_size,
+        np.random.seed(0)
+        h_real = tf.convert_to_tensor(np.random.normal(loc=0.0, size=[batch_size,
                                             self.num_rx,
                                             self.num_rx_ant,
                                             self.num_tx,
                                             self.num_tx_ant,
                                             1, # One path
                                             1], # Same response over the block
-                                            stddev=std,
-                                            dtype = self._dtype.real_dtype)
-        h_img = tf.random.normal(shape=[    batch_size,
+                                            scale=std
+                                            ), dtype = self._dtype.real_dtype)
+        h_img = tf.convert_to_tensor(np.random.normal(loc=0.0, size=[batch_size,
                                             self.num_rx,
                                             self.num_rx_ant,
                                             self.num_tx,
                                             self.num_tx_ant,
                                             1, # One cluster
                                             1], # Same response over the block
-                                            stddev=std,
-                                            dtype = self._dtype.real_dtype)
+                                            scale=std
+                                            ), dtype = self._dtype.real_dtype)
         h = tf.complex(h_real, h_img)
         # Tile the response over the block
         h = tf.tile(h, [1, 1, 1, 1, 1, 1, num_time_steps])

@@ -12,7 +12,7 @@ import tensorflow as tf
 gpus = tf.config.list_physical_devices('GPU')
 print('Number of GPUs available :', len(gpus))
 if gpus:
-    gpu_num = 0 # Number of the GPU to be used
+    gpu_num = 1 # Number of the GPU to be used
     try:
         tf.config.set_visible_devices(gpus[gpu_num], 'GPU')
         print('Only GPU number', gpu_num, 'used.')
@@ -32,42 +32,42 @@ from sionna.utils import BinarySource
 class TestBPDecoding(unittest.TestCase):
     "Testcases for LDPCBPDecoder class."
 
-    def test_dtypes(self):
-        """Test against correct dtypes:
-        - input parameters (must be int etc.)
-        - parity-check matrix is only allowed to contain binary values
-        """
+    # def test_dtypes(self):
+    #     """Test against correct dtypes:
+    #     - input parameters (must be int etc.)
+    #     - parity-check matrix is only allowed to contain binary values
+    #     """
 
-        # Raise error if PCM contains other elements than 0,1
-        pcm = np.random.uniform(0,2,[100,150]).astype(int)
-        pcm[10,20] = 2
-        with self.assertRaises(AssertionError):
-            dec = LDPCBPDecoder(pcm)
+    #     # Raise error if PCM contains other elements than 0,1
+    #     pcm = np.random.uniform(0,2,[100,150]).astype(int)
+    #     pcm[10,20] = 2
+    #     with self.assertRaises(AssertionError):
+    #         dec = LDPCBPDecoder(pcm)
 
-        # raise error if llrs are not tf.float32
-        batch_size = 100
-        n = 64
-        k = 32
-        pcm = np.random.uniform(0,2,[n-k, n]).astype(int)
-        dec = LDPCBPDecoder(pcm)
-        llr = tf.random.uniform([tf.cast(batch_size, dtype=tf.int32),
-                                 tf.cast(n, dtype=tf.int32)],
-                                 maxval=100,
-                                 dtype=tf.int32)
-        with self.assertRaises(TypeError):
-            dec(llr)
+    #     # raise error if llrs are not tf.float32
+    #     batch_size = 100
+    #     n = 64
+    #     k = 32
+    #     pcm = np.random.uniform(0,2,[n-k, n]).astype(int)
+    #     dec = LDPCBPDecoder(pcm)
+    #     llr = tf.random.uniform([tf.cast(batch_size, dtype=tf.int32),
+    #                              tf.cast(n, dtype=tf.int32)],
+    #                              maxval=100,
+    #                              dtype=tf.int32)
+    #     with self.assertRaises(TypeError):
+    #         dec(llr)
 
-        # raise error if input shape does not match PCM dim
-        batch_size = 100
-        n = 64
-        k = 32
-        pcm = np.random.uniform(0,2,[n-k, n]).astype(int)
-        dec = LDPCBPDecoder(pcm)
-        llr = tf.random.uniform([tf.cast(batch_size, dtype=tf.int32),
-                                 tf.cast(n+1, dtype=tf.int32)],
-                                 dtype=tf.float32)
-        with self.assertRaises(AssertionError):
-            dec(llr)
+    #     # raise error if input shape does not match PCM dim
+    #     batch_size = 100
+    #     n = 64
+    #     k = 32
+    #     pcm = np.random.uniform(0,2,[n-k, n]).astype(int)
+    #     dec = LDPCBPDecoder(pcm)
+    #     llr = tf.random.uniform([tf.cast(batch_size, dtype=tf.int32),
+    #                              tf.cast(n+1, dtype=tf.int32)],
+    #                              dtype=tf.float32)
+    #     with self.assertRaises(AssertionError):
+    #         dec(llr)
 
 #     def test_CN(self):
 #         """Test that CN function works correctly (i.e., extrinsic and sign preserving). Must be done for all node types.
@@ -204,45 +204,45 @@ class TestBPDecoding(unittest.TestCase):
 #             # which is further amplified with more iterations.
 #             self.assertTrue(np.allclose(x[0,:],x[i,:],atol=1e-4))
 
-#     def test_gradient(self):
-#         """Test that gradient is accessible and not None."""
+    def test_gradient(self):
+        """Test that gradient is accessible and not None."""
 
-#         batch_size = 100
-#         pcm, k, n, _ = load_parity_check_examples(2)
+        batch_size = 100
+        pcm, k, n, _ = load_parity_check_examples(2)
 
-#         # check that trainable parameter works as expected
-#         dec = LDPCBPDecoder(pcm, trainable=True)
-#         self.assertFalse(len(dec.trainable_variables)==0) # trainable variable
-#         dec = LDPCBPDecoder(pcm, trainable=False)
-#         self.assertTrue(len(dec.trainable_variables)==0) # no trainable variable
+        # check that trainable parameter works as expected
+        dec = LDPCBPDecoder(pcm, trainable=True)
+        self.assertFalse(len(dec.trainable_variables)==0) # trainable variable
+        dec = LDPCBPDecoder(pcm, trainable=False)
+        self.assertTrue(len(dec.trainable_variables)==0) # no trainable variable
 
-#         cns = ['boxplus', 'boxplus-phi','minsum']
-#         trainable = [True, False]
-#         for cn in cns:
-#             for t in trainable:
-#                 dec = LDPCBPDecoder(pcm,
-#                                     trainable=t,
-#                                     cn_type=cn,
-#                                     hard_out=False)
-#                 llr = tf.random.normal([batch_size, n], mean=4.2, stddev=1)
+        cns = ['boxplus', 'boxplus-phi','minsum']
+        trainable = [True, False]
+        for cn in cns:
+            for t in trainable:
+                dec = LDPCBPDecoder(pcm,
+                                    trainable=t,
+                                    cn_type=cn,
+                                    hard_out=False)
+                llr = tf.random.normal([batch_size, n], mean=4.2, stddev=1)
 
-#                 with tf.GradientTape() as tape:
-#                     x = dec(llr)
-#                     grads = tape.gradient(x, dec.trainable_variables)
+                with tf.GradientTape() as tape:
+                    x = dec(llr)
+                    grads = tape.gradient(x, dec.trainable_variables)
 
-#                     # check that gradients exist
-#                     self.assertIsNotNone(grads)
+                    # check that gradients exist
+                    self.assertIsNotNone(grads)
 
-#                     # check that gradients are provided
-#                     if t: # if trainable we should get gradients
-#                         self.assertTrue(len(grads)>0), "no gradient found"
+                    # check that gradients are provided
+                    if t: # if trainable we should get gradients
+                        self.assertTrue(len(grads)>0), "no gradient found"
 
-#                         # and check that array is not None
-#                         for g in grads:
-#                             self.assertTrue(not g is None), "grad is None"
-#                     else:
-#                         self.assertTrue(len(grads)==0), \
-#                                      "gradient should not exist"
+                        # and check that array is not None
+                        for g in grads:
+                            self.assertTrue(not g is None), "grad is None"
+                    else:
+                        self.assertTrue(len(grads)==0), \
+                                     "gradient should not exist"
 
 #     def test_all_erasure(self):
 #         """Test that all-erasure (llr=0) cw yields constant all-zero output."""

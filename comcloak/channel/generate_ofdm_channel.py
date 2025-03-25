@@ -1,8 +1,6 @@
 """Class for generating channel frequency responses"""
 import torch
 
-import sys
-sys.path.insert(0, 'D:\sionna-main')
 from .utils import subcarrier_frequencies, cir_to_ofdm_channel
 
 class GenerateOFDMChannel:

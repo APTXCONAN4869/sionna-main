@@ -419,22 +419,22 @@ class Constellation(nn.Module):
         : matplotlib.figure.Figure
             A handle to a matplot figure object.
         """
-        maxval = np.max(np.abs(self.points))*1.05
+        maxval = torch.max(torch.abs(self.points))*1.05
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111)
         plt.xlim(-maxval, maxval)
         plt.ylim(-maxval, maxval)
-        plt.scatter(np.real(self.points), np.imag(self.points))
+        plt.scatter(torch.real(self.points), torch.imag(self.points))
         ax.set_aspect("equal", adjustable="box")
         plt.xlabel("Real Part")
         plt.ylabel("Imaginary Part")
         plt.grid(True, which="both", axis="both")
         plt.title("Constellation Plot")
         if labels is True:
-            for j, p in enumerate(self.points.numpy()):
+            for j, p in enumerate(self.points):
                 plt.annotate(
                     np.binary_repr(j, self.num_bits_per_symbol),
-                    (np.real(p), np.imag(p))
+                    (torch.real(p), torch.imag(p))
                 )
         return fig
 
@@ -712,14 +712,21 @@ class SymbolLogits2LLRs(nn.Module):
             exp_ps1 = gather_pytorch(exp_ps, self._c1, axis=-1)
         # Compute LLRs using the definition log( Pr(b=1)/Pr(b=0) )
         # shape [..., n, num_bits_per_symbol]
-        if self._with_prior:
-            max_exp1, _ = self._reduce(exp_ps1 + exp1, axis=-2)
-            max_exp0, _ = self._reduce(exp_ps0 + exp0, axis=-2)
-            llr = max_exp1 - max_exp0
+        if self._method == 'app':
+            if self._with_prior:
+                llr = torch.logsumexp(exp_ps1 + exp1, axis=-2)\
+                        - torch.logsumexp(exp_ps0 + exp0, axis=-2)
+            else:
+                llr = torch.logsumexp(exp1, axis=-2) - torch.logsumexp(exp0, axis=-2)
         else:
-            max_exp1, _ = self._reduce(exp1, axis=-2)  
-            max_exp0, _ = self._reduce(exp0, axis=-2)  
-            llr = max_exp1 - max_exp0
+            if self._with_prior:
+                max_exp1, _ = torch.max(exp_ps1 + exp1, axis=-2)
+                max_exp0, _ = torch.max(exp_ps0 + exp0, axis=-2)
+                llr = max_exp1 - max_exp0
+            else:
+                max_exp1, _ = torch.max(exp1, axis=-2)  
+                max_exp0, _ = torch.max(exp0, axis=-2)  
+                llr = max_exp1 - max_exp0
 
         if self._hard_out:
             return comcloak.utils.hard_decisions(llr)
