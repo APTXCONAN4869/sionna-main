@@ -155,6 +155,7 @@ def gather_pytorch(params: torch.Tensor, indices: int | torch.Tensor, axis: int 
     else:
         batch_dims = batch_dims if batch_dims >= 0 else indices.dim()+batch_dims
         output_shape = params.shape[:axis] + indices.shape[batch_dims:] + params.shape[axis+1:]
+        indices = indices.to(params.device)
         output = params.index_select(axis, indices.reshape((-1,))).unflatten(axis, indices.shape)
         for index in range(batch_dims):
             output = output.diagonal(dim1=0, dim2=axis-index)

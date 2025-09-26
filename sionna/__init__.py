@@ -16,7 +16,7 @@ from . import ofdm
 from . import mimo
 from . import channel
 from . import signal
-from . import rt
+# from . import rt
 from .config import *
 
 # Instantiate global configuration object

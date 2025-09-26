@@ -1,0 +1,6 @@
+matplotlib
+pandas
+onnx==1.16.2
+tf2onnx
+polygraphy
+scipy

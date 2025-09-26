@@ -555,7 +555,7 @@ class ChannelCoefficientsGenerator:
             Matrix with random phases in (7.5-22)
         """
         xpr = rays.xpr
-        print('xpr:-----',xpr)
+        # print('xpr:-----',xpr)
 
         xpr_scaling = torch.complex(torch.sqrt(1/xpr.to(self._real_dtype)),
             torch.tensor(0., dtype=self._real_dtype))
@@ -999,7 +999,7 @@ class ChannelCoefficientsGenerator:
         aod = topology.los_aod
         zoa = topology.los_zoa
         zod = topology.los_zod
-        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', zod.numpy())
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', zod.numpy())
          # LoS departure and arrival angles
         aoa = torch.unsqueeze(torch.unsqueeze(aoa, dim=3), dim=4)
         zoa = torch.unsqueeze(torch.unsqueeze(zoa, dim=3), dim=4)

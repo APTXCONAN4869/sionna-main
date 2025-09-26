@@ -13,7 +13,7 @@ sys.path.insert(0, 'D:\sionna-main')
 # from comcloak.ofdm import pilot_pattern_z, ofdm_test_module_z
 from .pilot_pattern import PilotPattern, EmptyPilotPattern, KroneckerPilotPattern
 from comcloak.utils import flatten_last_dims, flatten_dims, split_dim
-
+from comcloak.supplement import gather_pytorch
 # def gather_pytorch(input_data, indices=None, batch_dims=0, axis=0):
 #     if batch_dims == 0:
 #         input_data = torch.tensor(input_data)
@@ -51,27 +51,27 @@ from comcloak.utils import flatten_last_dims, flatten_dims, split_dim
 #         result.append(r)
 #     return torch.stack(result)
 
-def gather_pytorch(input_data, indices=None, batch_dims=0, axis=0):
-    input_data = torch.tensor(input_data)
-    indices = torch.tensor(indices)
-    if batch_dims == 0:
-        if axis < 0:
-            axis = len(input_data.shape) + axis
-        data = torch.index_select(input_data, axis, indices.flatten())
-        shape_input = list(input_data.shape)
-        # shape_ = delete(shape_input, axis)
-        # 连接列表
-        shape_output = shape_input[:axis] + \
-            list(indices.shape) + shape_input[axis + 1:]
-        data_output = data.reshape(shape_output)
-        return data_output
-    else:
-        data_output = []
-        for data,ind in zip(input_data, indices):
-            r = gather_pytorch(data, ind, batch_dims=batch_dims-1)
-            data_output.append(r)
-        return torch.stack(data_output)
-        # return torch.gather(input_data, , indices)
+# def gather_pytorch(input_data, indices=None, batch_dims=0, axis=0):
+#     input_data = torch.tensor(input_data)
+#     indices = torch.tensor(indices)
+#     if batch_dims == 0:
+#         if axis < 0:
+#             axis = len(input_data.shape) + axis
+#         data = torch.index_select(input_data, axis, indices.flatten())
+#         shape_input = list(input_data.shape)
+#         # shape_ = delete(shape_input, axis)
+#         # 连接列表
+#         shape_output = shape_input[:axis] + \
+#             list(indices.shape) + shape_input[axis + 1:]
+#         data_output = data.reshape(shape_output)
+#         return data_output
+#     else:
+#         data_output = []
+#         for data,ind in zip(input_data, indices):
+#             r = gather_pytorch(data, ind, batch_dims=batch_dims-1)
+#             data_output.append(r)
+#         return torch.stack(data_output)
+#         # return torch.gather(input_data, , indices)
 
 class ResourceGrid():
     """Defines a `ResourceGrid` spanning multiple OFDM symbols and subcarriers."""
@@ -181,7 +181,7 @@ class ResourceGrid():
         sc_ind = range(num_gc[0], self.fft_size - num_gc[1])
         if self.dc_null:
             sc_ind = np.delete(sc_ind, self.dc_ind - num_gc[0])
-        return sc_ind
+        return torch.tensor(sc_ind)
 
     @property
     def num_data_symbols(self):
@@ -556,7 +556,7 @@ class ResourceGridDemapper(nn.Module):
         y = flatten_dims(y, 2, 0)
 
         # Put first dimension into the right ordering
-        stream_ind = self._stream_management.stream_ind
+        stream_ind = torch.tensor(self._stream_management.stream_ind)
         y = gather_pytorch(y, stream_ind, axis=0)
 
         # Reshape first dimensions to [num_tx, num_streams] so that
