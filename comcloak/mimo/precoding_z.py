@@ -73,8 +73,8 @@ def zero_forcing_precoder(x, h, return_precoding_matrix=False):
 
     # Normalize each column to unit power
     norm = torch.sqrt((torch.abs(g)**2).sum(axis=-2, keepdims=True))
-    g = g / torch.tensor(norm, g.dtype)
-
+    g = g / torch.tensor(norm, dtype=g.dtype)
+    g = g[..., :x.shape[-1]]
     # Expand last dim of `x` for precoding
     x_precoded = x.unsqueeze(-1)
 

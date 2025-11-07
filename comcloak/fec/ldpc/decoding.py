@@ -540,7 +540,7 @@ class LDPCBPDecoder(nn.Module):
         # subtract extrinsic message from node value
         # x = tf.expand_dims(x, axis=1)
         # x = tf.add(-msg, x)
-        msg.flat_values = (lambda x, y, row_ind:x + gather_pytorch(y, row_ind))\
+        msg.flat_values = (lambda x, y, row_ind:x + gather_pytorch(y, torch.tensor(row_ind)))\
                                     (-1.*msg.flat_values, x, msg.value_rowids())
         
 
@@ -591,7 +591,7 @@ class LDPCBPDecoder(nn.Module):
         # Note this is (potentially) numerically unstable
         # msg = msg**-1 * tf.expand_dims(msg_prod, axis=1) # remove own edge
 
-        msg.flat_values = (lambda x, y, row_ind :x * gather_pytorch(y, row_ind))\
+        msg.flat_values = (lambda x, y, row_ind :x * gather_pytorch(y, torch.tensor(row_ind)))\
                                 (msg.flat_values**-1, msg_prod, msg.value_rowids())
 
         # Overwrite small (numerical zeros) message values with exact zero
@@ -657,7 +657,7 @@ class LDPCBPDecoder(nn.Module):
         # the following code provides a workaround that supports XLA
 
         # sign_val = sign_val * tf.expand_dims(sign_node, axis=1)
-        sign_val.flat_values = (lambda x, y, row_ind :x * gather_pytorch(y, row_ind))\
+        sign_val.flat_values = (lambda x, y, row_ind :x * gather_pytorch(y, torch.tensor(row_ind)))\
                                     (sign_val.flat_values, sign_node, sign_val.value_rowids())
         msg = msg.map_flat_values(torch.abs) # remove sign
 
@@ -669,7 +669,7 @@ class LDPCBPDecoder(nn.Module):
         # the following code provides a workaround that supports XLA
 
         # msg = tf.add( -msg, tf.expand_dims(msg_sum, axis=1)) # remove own edge
-        msg.flat_values = (lambda x, y, row_ind :x + gather_pytorch(y, row_ind))\
+        msg.flat_values = (lambda x, y, row_ind :x + gather_pytorch(y, torch.tensor(row_ind)))\
                                 (-1.*msg.flat_values, msg_sum, msg.value_rowids())
 
         # apply _phi element-wise (does not support ragged Tensors)
@@ -723,7 +723,7 @@ class LDPCBPDecoder(nn.Module):
 
         # sign_val = self._stop_ragged_gradient(sign_val) \
         #             * tf.expand_dims(sign_node, axis=1)
-        sign_val.flat_values = (lambda x, y, row_ind:torch.multiply(x, gather_pytorch(y, row_ind)))\
+        sign_val.flat_values = (lambda x, y, row_ind:torch.multiply(x, gather_pytorch(y, torch.tensor(row_ind))))\
                                     (self._stop_ragged_gradient(sign_val).flat_values, 
                                      sign_node, 
                                      sign_val.value_rowids())
@@ -750,7 +750,7 @@ class LDPCBPDecoder(nn.Module):
         # and subtract min; the new array contains zero at the min positions
         # benefits from broadcasting; all other values are positive
         msg_min1 = copy.deepcopy(msg)
-        msg_min1.flat_values = (lambda x, y, row_ind:x - gather_pytorch(y, row_ind))\
+        msg_min1.flat_values = (lambda x, y, row_ind:x - gather_pytorch(y, torch.tensor(row_ind)))\
                             (msg.flat_values,
                             min_val.squeeze(1),
                             msg.value_rowids())
@@ -784,8 +784,8 @@ class LDPCBPDecoder(nn.Module):
         # msg_e = tf.where(msg==LARGE_VAL, min_val_e, min_val)
         # print("min_val: ", min_val)
         # print("msg.value_rowids: ", torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]))
-        min_1 = gather_pytorch(min_val, msg.value_rowids()).squeeze(1)
-        min_e = gather_pytorch(min_val_e, msg.value_rowids()).squeeze(1)
+        min_1 = gather_pytorch(min_val, torch.tensor(msg.value_rowids())).squeeze(1)
+        min_e = gather_pytorch(min_val_e, torch.tensor(msg.value_rowids())).squeeze(1)
         msg_e = copy.deepcopy(msg)
         msg_e.flat_values = (lambda x: torch.where(x==LARGE_VAL, min_e, min_1))\
                                 (msg.flat_values)
@@ -947,7 +947,7 @@ class LDPCBPDecoder(nn.Module):
                                                    
             # permute edges into CN perspective
             # indices = torch.stack(self._cn_mask_tf.to_list())
-            flat_values =  gather_pytorch(msg_vn.flat_values, self._cn_mask_tf.flat_values, axis=None)
+            flat_values =  gather_pytorch(msg_vn.flat_values, torch.tensor(self._cn_mask_tf.flat_values))
             msg_cn = RaggedTensor(flat_values, self._cn_mask_tf.row_splits)
             # check node update using the pre-defined function
             msg_cn = self._cn_update(msg_cn)
@@ -962,7 +962,7 @@ class LDPCBPDecoder(nn.Module):
                                                            torch.reshape(mi, (1)))
         
             # re-permute edges to variable node perspective
-            msg_vn = gather_pytorch(msg_cn.flat_values, self._ind_cn_inv, axis=None)
+            msg_vn = gather_pytorch(msg_cn.flat_values, torch.tensor(self._ind_cn_inv))
             return llr_ch, msg_vn, it
         
         
@@ -1330,7 +1330,7 @@ class LDPC5GDecoder(LDPCBPDecoder):
         # Sec. 5.4.2.2 in 38.212
         if self._encoder.num_bits_per_symbol is not None:
             llr_ch_reshaped = gather_pytorch(llr_ch_reshaped,
-                                             self._encoder.out_int_inv,
+                                             torch.tensor(self._encoder.out_int_inv),
                                              axis=-1)
 
         # undo puncturing of the first 2*Z bit positions
@@ -1418,7 +1418,7 @@ class LDPC5GDecoder(LDPCBPDecoder):
             # if used, apply rate-matching output interleaver again as
             # Sec. 5.4.2.2 in 38.212
             if self._encoder.num_bits_per_symbol is not None:
-                x_short = gather_pytorch(x_short, self._encoder.out_int, axis=-1)
+                x_short = gather_pytorch(x_short, torch.tensor(self._encoder.out_int), axis=-1)
 
             # Reshape x_short so that it matches the original input dimensions
             # overwrite first dimension as this could be None (Keras)

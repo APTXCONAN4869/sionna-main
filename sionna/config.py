@@ -44,6 +44,7 @@ class Config():
         """
         return self._xla_compat
 
+
     @xla_compat.setter
     def xla_compat(self, value):
         self._xla_compat = bool(value)

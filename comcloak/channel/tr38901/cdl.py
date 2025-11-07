@@ -290,13 +290,23 @@ class CDL(ChannelModel):
     def __call__(self, batch_size, num_time_steps, sampling_frequency):
 
         ## Topology for generating channel coefficients
-        # Sample random velocities
-        v_r = torch.rand(size=[batch_size, 1],
-                                dtype=self._real_dtype)*(self._max_speed-self._min_speed)+self._min_speed
-        v_phi = torch.rand(  size=[batch_size, 1],
-                                    dtype=self._real_dtype)*(2.*PI)
-        v_theta = torch.rand(    size=[batch_size, 1],
-                                        dtype=self._real_dtype)*(PI)
+        # # Sample random velocities
+        # v_r = torch.rand(size=[batch_size, 1],
+        #                         dtype=self._real_dtype)*(self._max_speed-self._min_speed)+self._min_speed
+        # v_phi = torch.rand(  size=[batch_size, 1],
+        #                             dtype=self._real_dtype)*(2.*PI)
+        # v_theta = torch.rand(    size=[batch_size, 1],
+        #                                 dtype=self._real_dtype)*(PI)
+        v_r = torch.tensor(np.random.uniform(low=self._min_speed, high=self._max_speed, 
+                                            size=(batch_size, 1)),
+                                            dtype=torch.float32)
+        v_phi = torch.tensor(np.random.uniform(low=0.0, high=2.*PI, 
+                                                size=(batch_size, 1)),
+                                                dtype=torch.float32)
+        v_theta = torch.tensor(np.random.uniform(low=0.0, high=PI, 
+                                                size=(batch_size, 1)),
+                                                dtype=torch.float32)
+        
         velocities = torch.stack([ v_r*cos(v_phi)*sin(v_theta),
                                 v_r*sin(v_phi)*sin(v_theta),
                                 v_r*cos(v_theta)], dim=-1)
@@ -682,10 +692,14 @@ class CDL(ChannelModel):
         # normal distribution
         if not isinstance(angles,torch.Tensor):
             angles = torch.tensor(angles)
-        random_numbers = torch.randn_like(angles)
+        # random_numbers = torch.randn_like(angles)
+        np.random.seed(12345)
+        random_numbers = torch.tensor(np.random.normal(loc=0.0, scale=1, 
+                                            size=angles.shape),
+                                            dtype=torch.float32)
         shuffled_indices = torch.argsort(random_numbers)
         # Shuffling the angles
-        shuffled_angles = gather_pytorch(angles,shuffled_indices, batch_dims=4)
+        shuffled_angles = gather_pytorch(angles, shuffled_indices, batch_dims=4)
         return shuffled_angles
     
     def _random_coupling(self, aoa, aod, zoa, zod):

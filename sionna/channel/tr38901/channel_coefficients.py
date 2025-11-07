@@ -505,7 +505,7 @@ class ChannelCoefficientsGenerator:
             Matrix with random phases in (7.5-22)
         """
         xpr = rays.xpr
-        print('xpr:-----',xpr)
+        # print('xpr:-----',xpr)
 
         xpr_scaling = tf.complex(tf.sqrt(1/xpr),
             tf.constant(0., self._dtype.real_dtype))
@@ -820,7 +820,7 @@ class ChannelCoefficientsGenerator:
         # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', rays.zod.numpy())
         h_field = self._step_11_field_matrix(topology, rays.aoa, rays.aod,
                                                     rays.zoa, rays.zod, h_phase)
-        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', h_field.numpy())
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', h_field.numpy())
         h_array = self._step_11_array_offsets(topology, rays.aoa, rays.aod,
                                                             rays.zoa, rays.zod)
         # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', h_array.numpy())
@@ -950,7 +950,7 @@ class ChannelCoefficientsGenerator:
         aod = topology.los_aod
         zoa = topology.los_zoa
         zod = topology.los_zod
-        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', zod.numpy())
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/tftensor.npy', zod.numpy())
          # LoS departure and arrival angles
         aoa = tf.expand_dims(tf.expand_dims(aoa, axis=3), axis=4)
         zoa = tf.expand_dims(tf.expand_dims(zoa, axis=3), axis=4)

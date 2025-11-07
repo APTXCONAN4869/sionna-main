@@ -219,7 +219,7 @@ class BaseChannelEstimator(ABC, nn.Module):
         # [batch_size, num_rx, num_rx_ant, num_tx, num_streams,...
         #  ..., num_pilot_symbols]
         y_pilots = gather_pytorch(y_eff_flat, self._pilot_ind, axis=-1)
-        np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', self._pilot_ind.numpy())
+        # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', self._pilot_ind.numpy())
         # print('indice:\n', self._pilot_ind)
         # print(torch.nonzero(y_pilots))
         # print("output2:\n", y_eff_flat[y_eff_flat != 0 + 0j])

@@ -165,7 +165,7 @@ class ZFPrecoder(Layer):
 
         ###
         ### ZF precoding
-        ###
+        ### 
         x_precoded, g = zero_forcing_precoder(x_precoded,
                                               h_pc_desired,
                                               return_precoding_matrix=True)

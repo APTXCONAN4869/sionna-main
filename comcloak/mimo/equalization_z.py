@@ -90,8 +90,8 @@ def lmmse_equalizer(y, h, s, whiten_interference=True):
     """
     if not whiten_interference:
         # Compute G
-        g = torch.matmul(h.conj().transpose(-2, -1), h) + s
-        g = torch.matmul(linalg.inv(g), h.conj().transpose(-2, -1))
+        g = torch.matmul(h, h.conj().transpose(-2, -1)) + s
+        g = torch.matmul(h.conj().transpose(-2, -1), linalg.inv(g))
     else:
         # Whiten channel
         y, h = whiten_channel(y, h, s, return_s=False)
@@ -119,6 +119,7 @@ def lmmse_equalizer(y, h, s, whiten_interference=True):
     no_eff = torch.real(one / d - one)
 
     return x_hat, no_eff
+
 
 
 

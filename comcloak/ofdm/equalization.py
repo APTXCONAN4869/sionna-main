@@ -3,29 +3,29 @@ import torch.nn as nn
 import comcloak
 from comcloak.utils import flatten_dims, split_dim, flatten_last_dims, expand_to_rank
 from comcloak.ofdm import RemoveNulledSubcarriers
+from comcloak.supplement import gather_pytorch, argsort_ascending_pytorch
+from comcloak.mimo import lmmse_equalizer, zf_equalizer, mf_equalizer
 
-from sionna.mimo import lmmse_equalizer, zf_equalizer, mf_equalizer
-
-def gather_pytorch(input_data, indices=None, batch_dims=0, axis=0):
-    input_data = torch.tensor(input_data)
-    indices = torch.tensor(indices)
-    if batch_dims == 0:
-        if axis < 0:
-            axis = len(input_data.shape) + axis
-        data = torch.index_select(input_data, axis, indices.flatten())
-        shape_input = list(input_data.shape)
-        # shape_ = delete(shape_input, axis)
-        # 连接列表
-        shape_output = shape_input[:axis] + \
-            list(indices.shape) + shape_input[axis + 1:]
-        data_output = data.reshape(shape_output)
-        return data_output
-    else:
-        data_output = []
-        for data,ind in zip(input_data, indices):
-            r = gather_pytorch(data, ind, batch_dims=batch_dims-1)
-            data_output.append(r)
-        return torch.stack(data_output)
+# def gather_pytorch(input_data, indices=None, batch_dims=0, axis=0):
+#     input_data = torch.tensor(input_data)
+#     indices = torch.tensor(indices)
+#     if batch_dims == 0:
+#         if axis < 0:
+#             axis = len(input_data.shape) + axis
+#         data = torch.index_select(input_data, axis, indices.flatten())
+#         shape_input = list(input_data.shape)
+#         # shape_ = delete(shape_input, axis)
+#         # 连接列表
+#         shape_output = shape_input[:axis] + \
+#             list(indices.shape) + shape_input[axis + 1:]
+#         data_output = data.reshape(shape_output)
+#         return data_output
+#     else:
+#         data_output = []
+#         for data,ind in zip(input_data, indices):
+#             r = gather_pytorch(data, ind, batch_dims=batch_dims-1)
+#             data_output.append(r)
+#         return torch.stack(data_output)
 
 class OFDMEqualizer(nn.Module):
     r"""OFDMEqualizer(equalizer, resource_grid, stream_management, dtype=torch.complex64, **kwargs)
@@ -119,8 +119,8 @@ class OFDMEqualizer(nn.Module):
         # Precompute indices to extract data symbols
         mask = resource_grid.pilot_pattern.mask
         num_data_symbols = resource_grid.pilot_pattern.num_data_symbols
-        data_ind = torch.argsort(mask.flatten(), descending=False)
-        self._data_ind = data_ind[:num_data_symbols]
+        data_ind = argsort_ascending_pytorch(flatten_last_dims(mask))
+        self._data_ind = data_ind[..., :num_data_symbols]
 
     def forward(self, inputs):
         y, h_hat, err_var, no = inputs
@@ -153,8 +153,8 @@ class OFDMEqualizer(nn.Module):
         # New shape is:
         # [batch_size, num_rx, num_ofdm_symbols,...
         #  ..., num_effective_subcarriers, num_rx_ant, num_tx*num_streams]
-        err_var_dt = err_var.expand_as(h_hat).permute(0, 1, 5, 6, 2, 3, 4).flatten(2, 3).to(self._dtype)
-
+        err_var_dt = err_var.expand_as(h_hat).permute(0, 1, 5, 6, 2, 3, 4)
+        err_var_dt = flatten_last_dims(err_var_dt, 2).to(self._dtype)
         # Construct MIMO channels
         # Reshape h_hat for the construction of desired/interfering channels:
         # [num_rx, num_tx, num_streams_per_tx, batch_size, num_rx_ant, ,...
@@ -168,8 +168,8 @@ class OFDMEqualizer(nn.Module):
         # Gather desired and undesired channels
         ind_desired = self._stream_management.detection_desired_ind
         ind_undesired = self._stream_management.detection_undesired_ind
-        h_dt_desired = gather_pytorch(h_dt, ind_desired, axis=0)
-        h_dt_undesired = gather_pytorch(h_dt, ind_undesired, axis=0)
+        h_dt_desired = gather_pytorch(h_dt, torch.tensor(ind_desired), axis=0)
+        h_dt_undesired = gather_pytorch(h_dt, torch.tensor(ind_undesired), axis=0)
 
         # Split first dimension to separate RX and TX
         # [num_rx, num_streams_per_rx, batch_size, num_rx_ant, ...
@@ -212,7 +212,6 @@ class OFDMEqualizer(nn.Module):
         s_csi = torch.diag_embed(err_var_dt.sum(dim=-1))
         # Final covariance matrix
         s = s_inf + s_no + s_csi
-
         # Compute symbol estimate and effective noise variance
         # [batch_size, num_rx, num_ofdm_symbols, num_effective_subcarriers,...
         #  ..., num_stream_per_rx]
@@ -227,13 +226,13 @@ class OFDMEqualizer(nn.Module):
         # Merge num_rx amd num_streams_per_rx
         # [num_rx * num_streams_per_rx, num_ofdm_symbols,...
         #  ...,num_effective_subcarriers, batch_size]
-        x_hat = x_hat.flatten(2, 0)
-        no_eff = no_eff.flatten(2, 0)
+        x_hat = flatten_dims(x_hat, 2, 0)
+        no_eff = flatten_dims(no_eff, 2, 0)
 
         # Put first dimension into the right ordering
         stream_ind = self._stream_management.stream_ind
-        x_hat = gather_pytorch(x_hat, stream_ind, axis=0)
-        no_eff = gather_pytorch(no_eff, stream_ind, axis=0)
+        x_hat = gather_pytorch(x_hat, torch.tensor(stream_ind), axis=0)
+        no_eff = gather_pytorch(no_eff, torch.tensor(stream_ind), axis=0)
 
         # Reshape first dimensions to [num_tx, num_streams] so that
         # we can compared to the way the streams were created.
@@ -254,9 +253,9 @@ class OFDMEqualizer(nn.Module):
 
         # Gather data symbols
         # [num_tx, num_streams, num_data_symbols, batch_size]
-        x_hat = gather_pytorch(x_hat, self._data_ind, batch_dims=2, axis=2)
-        no_eff = gather_pytorch(no_eff, self._data_ind, batch_dims=2, axis=2)
-
+        x_hat = gather_pytorch(x_hat, torch.tensor(self._data_ind), batch_dims=2, axis=2)
+        no_eff = gather_pytorch(no_eff, torch.tensor(self._data_ind), batch_dims=2, axis=2)
+        #([1, 4, 728, 8])([624])
         # Put batch_dim first
         # [batch_size, num_tx, num_streams, num_data_symbols]
         x_hat = x_hat.permute(3, 0, 1, 2)

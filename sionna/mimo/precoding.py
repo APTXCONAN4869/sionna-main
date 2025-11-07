@@ -76,11 +76,11 @@ def zero_forcing_precoder(x, h, return_precoding_matrix=False):
     # Compute pseudo inverse for precoding
     g = tf.matmul(h, h, adjoint_b=True)
     g = tf.matmul(h, matrix_inv(g), adjoint_a=True)
-
+    
     # Normalize each column to unit power
     norm = tf.sqrt(tf.reduce_sum(tf.abs(g)**2, axis=-2, keepdims=True))
     g = g/tf.cast(norm, g.dtype)
-
+    g = g[..., :x.shape[-1]]
     # Expand last dim of `x` for precoding
     x_precoded = tf.expand_dims(x, -1)
 

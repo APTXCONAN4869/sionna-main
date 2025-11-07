@@ -219,6 +219,7 @@ class OFDMEqualizer(Layer):
 
         # Final covariance matrix
         s = s_inf + s_no + s_csi
+        #
         s = tf.cast(s, self._dtype)
 
         ############################################################

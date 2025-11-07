@@ -1,6 +1,5 @@
 import torch
 from typing import Callable, List
-
 # def gather_pytorch(input_data, indices=None, batch_dims=0, axis=0):
 #     input_data = torch.tensor(input_data)
 #     indices = torch.tensor(indices)
@@ -160,6 +159,20 @@ def gather_pytorch(params: torch.Tensor, indices: int | torch.Tensor, axis: int 
         for index in range(batch_dims):
             output = output.diagonal(dim1=0, dim2=axis-index)
         return output.permute([index+len(output_shape)-batch_dims for index in range(batch_dims)]+[index for index in range(len(output_shape)-batch_dims)])
+
+def argsort_ascending_pytorch(mask: torch.Tensor):
+    """
+    Args:
+        mask: A boolean tensor of shape [..., N]
+    Returns:
+        data_ind: An integer tensor of shape [..., N] containing the indices that would sort the last dimension of `mask`.
+    """
+    flattened_tensor = mask.view(-1, mask.shape[-1])
+    data_ind = torch.stack([
+        torch.tensor(sorted(range(flattened_tensor.shape[-1]), key=lambda x: (flattened_tensor[i, x], x)))
+        for i in range(flattened_tensor.shape[0])
+    ]).reshape(mask.shape)
+    return data_ind
 
 class RaggedTensor:
     """

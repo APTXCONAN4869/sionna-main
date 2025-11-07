@@ -96,7 +96,9 @@ class ApplyOFDMChannel(tf.keras.layers.Layer):
             x, h_freq = inputs
 
         # Apply the channel response
-        x = expand_to_rank(x, h_freq.shape.rank, axis=1)
+        x = expand_to_rank(x, h_freq.shape.rank, axis=1)# only when num_streams_per_tx equals num_tx_ant can we do this unless we expand x using precoding matrix
+        # [batch_size, num_tx, num_streams_per_tx, num_ofdm_symbols, fft_size]x
+        # [batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_time_steps, fft_size]h_freq
         y = tf.reduce_sum(tf.reduce_sum(h_freq*x, axis=4), axis=3)
 
         # Add AWGN if requested

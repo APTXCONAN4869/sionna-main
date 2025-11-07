@@ -13,7 +13,7 @@ sys.path.insert(0, 'D:\sionna-main')
 # from comcloak.ofdm import pilot_pattern_z, ofdm_test_module_z
 from .pilot_pattern import PilotPattern, EmptyPilotPattern, KroneckerPilotPattern
 from comcloak.utils import flatten_last_dims, flatten_dims, split_dim
-from comcloak.supplement import gather_pytorch
+from comcloak.supplement import gather_pytorch, argsort_ascending_pytorch
 # def gather_pytorch(input_data, indices=None, batch_dims=0, axis=0):
 #     if batch_dims == 0:
 #         input_data = torch.tensor(input_data)
@@ -528,7 +528,7 @@ class ResourceGridDemapper(nn.Module):
         # Precompute indices to extract data symbols
         mask = resource_grid.pilot_pattern.mask
         num_data_symbols = resource_grid.pilot_pattern.num_data_symbols
-        data_ind = torch.argsort(flatten_last_dims(mask), descending=False)
+        data_ind = argsort_ascending_pytorch(flatten_last_dims(mask))
         self._data_ind = data_ind[...,:num_data_symbols]
 
     def forward(self, y):

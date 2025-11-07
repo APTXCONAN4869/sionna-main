@@ -142,6 +142,7 @@ def lmmse_equalizer(y, h, s, whiten_interference=True):
 
     return x_hat, no_eff
 
+
 def zf_equalizer(y, h, s):
     # pylint: disable=line-too-long
     r"""MIMO ZF Equalizer
