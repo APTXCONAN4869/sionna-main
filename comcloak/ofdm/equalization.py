@@ -124,6 +124,10 @@ class OFDMEqualizer(nn.Module):
 
     def forward(self, inputs):
         y, h_hat, err_var, no = inputs
+        if no is not torch.tensor:
+            no = torch.tensor(no, device=y.device)
+        else:
+            no = no.to(y.device)
         # y has shape:
         # [batch_size, num_rx, num_rx_ant, num_ofdm_symbols, fft_size]
 

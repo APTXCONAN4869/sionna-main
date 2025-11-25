@@ -3,70 +3,71 @@ import threading
 import queue
 import numpy as np
 import torch
+torch.backends.cudnn.benchmark = True
 import os
-gpu_num = 3 # Use "" to use the CPU
-os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu_num}"
+# gpu_num = 0 # Use "" to use the CPU
+# os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu_num}"
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-# Import sionna
+# Import comcloak
 try:
-    import sionna
+    import comcloak
 except ImportError as e:
-    # Install sionna if package is not already installed
+    # Install comcloak if package is not already installed
     import os
     import sys
     print("Current directory:", os.getcwd())
     sys.path.append("/home/wzs/project/sionna-main/")
-    # os.system("pip install sionna")
-    import sionna
+    # os.system("pip install comcloak")
+    import comcloak
 
-# Load the required sionna components
+# Load the required comcloak components
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 import time
 
-from sionna.mimo import StreamManagement
+from comcloak.mimo import StreamManagement
 
-from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
-from sionna.ofdm import OFDMModulator, OFDMDemodulator, ZFPrecoder, RemoveNulledSubcarriers
+from comcloak.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
+from comcloak.ofdm import OFDMModulator, OFDMDemodulator, ZFPrecoder, RemoveNulledSubcarriers
 
-from sionna.channel.tr38901 import AntennaArray, CDL, Antenna
-from sionna.channel import subcarrier_frequencies, cir_to_ofdm_channel, cir_to_time_channel, time_lag_discrete_time_channel
-from sionna.channel import ApplyOFDMChannel, ApplyTimeChannel, OFDMChannel, TimeChannel
+from comcloak.channel.tr38901 import AntennaArray, CDL, Antenna
+from comcloak.channel import subcarrier_frequencies, cir_to_ofdm_channel, cir_to_time_channel, time_lag_discrete_time_channel
+from comcloak.channel import ApplyOFDMChannel, ApplyTimeChannel, OFDMChannel, TimeChannel
 
-from sionna.fec.ldpc.encoding import LDPC5GEncoder
-from sionna.fec.ldpc.decoding import LDPC5GDecoder
+from comcloak.fec.ldpc.encoding import LDPC5GEncoder
+from comcloak.fec.ldpc.decoding import LDPC5GDecoder
 
-from sionna.mapping import Mapper, Demapper
+from comcloak.mapping import Mapper, Demapper
 
-from sionna.utils import BinarySource, ebnodb2no, sim_ber
-from sionna.utils.metrics import compute_ber
+from comcloak.utils import BinarySource, ebnodb2no, sim_ber
+from comcloak.utils.metrics import compute_ber
 import tensorflow as tf
 
-# Configure the notebook to use only a single GPU and allocate only as much memory as needed
-# For more details, see https://www.tensorflow.org/guide/gpu
-gpus = tf.config.list_physical_devices('GPU')
-# print("Available GPUs:", gpus)
-# print(f"可用的GPU数量: {len(gpus)}")
-if gpus:
-    try:
-        tf.config.experimental.set_memory_growth(gpus[0], True)
-    except RuntimeError as e:
-        print(e)
-# Avoid warnings from TensorFlow
-tf.get_logger().setLevel('ERROR')
+# # Configure the notebook to use only a single GPU and allocate only as much memory as needed
+# # For more details, see https://www.tensorflow.org/guide/gpu
+# gpus = tf.config.list_physical_devices('GPU')
+# # print("Available GPUs:", gpus)
+# # print(f"可用的GPU数量: {len(gpus)}")
+# if gpus:
+#     try:
+#         tf.config.experimental.set_memory_growth(gpus[0], True)
+#     except RuntimeError as e:
+#         print(e)
+# # Avoid warnings from TensorFlow
+# tf.get_logger().setLevel('ERROR')
 
-# # GPU configuration
-# if torch.cuda.is_available():
-#     num_gpus = torch.cuda.device_count()
-#     print(f"检测到 {num_gpus} 块 GPU:")
-#     for i in range(num_gpus):
-#         print(f"  - GPU {i}: {torch.cuda.get_device_name(i)}")
-#     device = torch.device("cuda:3")  
-# else:
-#     print("未检测到 GPU,使用 CPU")
-#     device = torch.device("cpu")
+# GPU configuration
+if torch.cuda.is_available():
+    num_gpus = torch.cuda.device_count()
+    print(f"检测到 {num_gpus} 块 GPU:")
+    for i in range(num_gpus):
+        print(f"  - GPU {i}: {torch.cuda.get_device_name(i)}")
+    device = torch.device("cuda:0")  
+else:
+    print("未检测到 GPU,使用 CPU")
+    device = torch.device("cpu")
 # The number of transmitted streams is equal to the number of UT antennas
 # in both uplink and downlink
 num_streams_per_tx = 4
@@ -118,7 +119,7 @@ decoder = LDPC5GDecoder(encoder, hard_out=True)
 
 def process_data(rx_data):
     
-    rx_data = rx_data
+    rx_data = rx_data.to(device)
     y = demodulator(rx_data)
     h_hat, err_var = ls_est ([y, no])
     x_hat, no_eff = lmmse_equ([y, h_hat, err_var, no])
@@ -147,8 +148,8 @@ data = rng.integers(-32768, 32768, size=frame_shape, dtype=dtype)
 data_f32 = data.astype(np.float32) / 32768.0
 complex_data = data_f32[..., 0] + 1j * data_f32[..., 1]  # [16,1120]
 batch = np.stack([complex_data]*batch_size, axis=0)                # 模拟 batch_size=8
-# rx_batch = torch.from_numpy(batch).to(torch.complex64).unsqueeze(1)  # [8,1,16,1120]
-rx_batch = tf.expand_dims(tf.convert_to_tensor(batch, dtype=tf.complex64), 1) 
+rx_batch = torch.from_numpy(batch).to(torch.complex64).unsqueeze(1)  # [8,1,16,1120]
+# rx_batch = tf.expand_dims(tf.convert_to_tensor(batch, dtype=tf.complex64), 1) 
 print(f"rx_batch shape: {rx_batch.shape}, dtype: {rx_batch.dtype}")
 print(f"Example value: {rx_batch[0,0,0,0:5]}")
 

@@ -222,7 +222,7 @@ class OFDMDemodulator(nn.Module):
         tmp = -2 * PI * self.l_min \
             / self.fft_size \
             * torch.arange(self.fft_size, dtype=torch.float32)
-        self._phase_compensation = torch.exp(torch.complex(torch.tensor(0.0), tmp))
+        self._phase_compensation = torch.exp(torch.complex(torch.tensor(0.0, device=inputs.device), tmp.to(inputs.device)))
 
         # Compute number of elements that will be truncated
         self._rest = np.mod(inputs.shape[-1],
@@ -254,6 +254,7 @@ class OFDMDemodulator(nn.Module):
         x = x * rot
 
         # Shift DC subcarrier to the middle
+        x = x.cpu()
         x = fftshift(x, axes=-1)
 
-        return torch.tensor(x)
+        return torch.tensor(x, device=inputs.device)

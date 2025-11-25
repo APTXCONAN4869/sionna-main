@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 """Classes and functions related to MIMO transmit precoding"""
-
+ 
 import tensorflow as tf
 from sionna.utils import matrix_inv
 

@@ -530,7 +530,7 @@ class LDPCBPDecoder(nn.Module):
         x = msg.reduce_sum()
 
         if not isinstance(llr_ch, torch.Tensor):
-            llr_ch = torch.tensor(llr_ch)
+            llr_ch = torch.tensor(llr_ch, device=x.device)
 
         x = torch.add(x, llr_ch)
 
@@ -813,12 +813,6 @@ class LDPCBPDecoder(nn.Module):
         x = x.permute(1, 0)
         return x
 
-    #########################
-    # Keras layer functions
-    #########################
-
-
-
     def forward(self, inputs):
         """Iterative BP decoding function.
 
@@ -879,8 +873,8 @@ class LDPCBPDecoder(nn.Module):
 
         # clip llrs for numerical stability
         llr_ch = torch.clip(llr_ch,
-                            min=-self._llr_max,
-                            max=self._llr_max)
+                            min=-self._llr_max.to(llr_ch.device),
+                            max=self._llr_max.to(llr_ch.device))
 
         # last dim must be of length n
 
@@ -897,7 +891,8 @@ class LDPCBPDecoder(nn.Module):
         # indices placed on the CPU device.
         # create permutation index from cn perspective
         self._cn_mask_tf = RaggedTensor.from_nested_list(self._gen_node_mask(self._cn_con),
-                                                        dtype=torch.int32)
+                                                        dtype=torch.int32,
+                                                        device=llr_ch.device)
 
         # batch dimension is last dimension due to ragged tensor representation
         llr_ch = llr_ch_reshaped.permute(1, 0)
@@ -912,14 +907,14 @@ class LDPCBPDecoder(nn.Module):
         if not self._stateful or msg_vn is None:
             msg_shape = torch.stack([torch.tensor(self._num_edges),
                                      torch.tensor(llr_ch.shape[1])], dim=0)
-            msg_vn = torch.zeros([self._num_edges, llr_ch.shape[1]], dtype=torch.float32)
+            msg_vn = torch.zeros([self._num_edges, llr_ch.shape[1]], dtype=torch.float32, device=llr_ch.device)
         else:
-            msg_vn = msg_vn.flat_values
+            msg_vn = msg_vn.flat_values.to(llr_ch.device)
 
         # track exit decoding trajectory; requires all-zero cw?
         if self._track_exit:
-            self._ie_c = torch.zeros(self._num_iter + 1)
-            self._ie_v = torch.zeros(self._num_iter + 1)
+            self._ie_c = torch.zeros(self._num_iter + 1, device=llr_ch.device)
+            self._ie_v = torch.zeros(self._num_iter + 1, device=llr_ch.device)
 
         # perform one decoding iteration
         # Remark: msg_vn cannot be ragged as input for tf.while_loop as
@@ -929,7 +924,7 @@ class LDPCBPDecoder(nn.Module):
         
             msg_vn = RaggedTensor.from_row_splits(
                         values=msg_vn,
-                        row_splits=torch.tensor(self._vn_row_splits, dtype=torch.int32))
+                        row_splits=torch.tensor(self._vn_row_splits, dtype=torch.int32, device=msg_vn.device))
             # variable node update
             msg_vn = self._vn_update(msg_vn, llr_ch)
         
@@ -978,7 +973,7 @@ class LDPCBPDecoder(nn.Module):
         # raggedTensor for final marginalization
         msg_vn = RaggedTensor.from_row_splits(
             values=msg_vn,
-            row_splits=torch.tensor(self._vn_row_splits, dtype=torch.int32))
+            row_splits=torch.tensor(self._vn_row_splits, dtype=torch.int32, device=msg_vn.device))
 
         # marginalize and remove ragged Tensor
         x_hat = torch.add(llr_ch, msg_vn.reduce_sum())
@@ -1253,20 +1248,6 @@ class LDPC5GDecoder(LDPCBPDecoder):
     # Keras layer functions
     #########################
 
-    def build(self, input_shape):
-        """Build model."""
-        if self._stateful:
-            assert (len(input_shape) == 2), \
-                "For stateful decoding, a tuple of two inputs is expected."
-            input_shape = input_shape[0]
-
-        # check input dimensions for consistency
-        assert (input_shape[-1] == self.encoder.n), \
-            'Last dimension must be of length n.'
-        assert (len(input_shape) >= 2), 'The inputs must have at least rank 2.'
-
-        self._old_shape_5g = input_shape
-
     def forward(self, inputs):
         """Iterative BP decoding function.
 
@@ -1335,7 +1316,7 @@ class LDPC5GDecoder(LDPCBPDecoder):
 
         # undo puncturing of the first 2*Z bit positions
         llr_5g = torch.cat(
-            [torch.zeros(batch_size, 2 * self.encoder.z, dtype=self._output_dtype),
+            [torch.zeros(batch_size, 2 * self.encoder.z, dtype=self._output_dtype, device=llr_ch_reshaped.device),
              # 改:tf.zeros和torch.zeros 后者shape用整数而非元组或列表
              llr_ch_reshaped],
             1)
@@ -1350,7 +1331,8 @@ class LDPC5GDecoder(LDPCBPDecoder):
 
         llr_5g = torch.cat([llr_5g,
                             torch.zeros(batch_size, nb_punc_bits - self._nb_pruned_nodes,
-                                        dtype=self._output_dtype)],
+                                        dtype=self._output_dtype,
+                                        device=llr_ch_reshaped.device)],
                            1)
 
         # undo shortening (= add 0 positions after k bits, i.e. LLR=LLR_max)
@@ -1364,8 +1346,8 @@ class LDPC5GDecoder(LDPCBPDecoder):
                         
 
         # negative sign due to logit definition
-        z = -self._llr_max.type(self._output_dtype) \
-            * torch.ones(batch_size, k_filler, dtype=self._output_dtype)
+        z = -self._llr_max.to(llr_ch_reshaped.device).type(self._output_dtype) \
+            * torch.ones(batch_size, k_filler, dtype=self._output_dtype, device=llr_ch_reshaped.device)
 
         llr_5g = torch.cat([x1, z, x2], 1)
 

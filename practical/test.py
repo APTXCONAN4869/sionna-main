@@ -8,5 +8,5 @@ if torch.cuda.is_available():
     print(f"检测到 {num_gpus} 块 GPU:")
     for i in range(num_gpus):
         print(f"  - GPU {i}: {torch.cuda.get_device_name(i)}")
-    device = torch.device("cuda")  # 默认用第一块 GPU
+    device = torch.device("cuda:3")
 tensor = torch.tensor(1, device=device)

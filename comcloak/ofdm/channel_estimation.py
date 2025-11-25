@@ -195,7 +195,9 @@ class BaseChannelEstimator(ABC, nn.Module):
         # print(torch.nonzero(y))
         # print("output:\n", y[y != 0 + 0j])
         if no is not torch.tensor:
-            no = torch.tensor(no)
+            no = torch.tensor(no, device=y.device)
+        else:
+            no = no.to(y.device)
         
         # y has shape:
         # [batch_size, num_rx, num_rx_ant, num_ofdm_symbols,..
@@ -218,7 +220,7 @@ class BaseChannelEstimator(ABC, nn.Module):
         # Resulting shape: y_eff_flat.shape[:-1] + pilot_ind.shape, i.e.:
         # [batch_size, num_rx, num_rx_ant, num_tx, num_streams,...
         #  ..., num_pilot_symbols]
-        y_pilots = gather_pytorch(y_eff_flat, self._pilot_ind, axis=-1)
+        y_pilots = gather_pytorch(y_eff_flat, self._pilot_ind.to(y_eff_flat.device), axis=-1)
         # np.save('/home/wzs/project/sionna-main/function_test/tensor_compare/pttensor.npy', self._pilot_ind.numpy())
         # print('indice:\n', self._pilot_ind)
         # print(torch.nonzero(y_pilots))
@@ -344,7 +346,7 @@ class LSChannelEstimator(BaseChannelEstimator, nn.Module):
         # We do a save division to replace Inf by 0.
         # Broadcasting from pilots here is automatic since pilots have shape
         # [num_tx, num_streams, num_pilot_symbols]
-        h_ls = torch.nan_to_num(y_pilots / self._pilot_pattern.pilots, nan=0.0, posinf=0.0, neginf=0.0)
+        h_ls = torch.nan_to_num(y_pilots / self._pilot_pattern.pilots.to(y_pilots.device), nan=0.0, posinf=0.0, neginf=0.0)
         # np.save('pttensor.npy', y_pilots.numpy())
         # print("h_ls:\n", h_ls[h_ls != 0 + 0j])
         # print("y_pilots:\n", y_pilots[y_pilots != 0 + 0j])
@@ -354,7 +356,7 @@ class LSChannelEstimator(BaseChannelEstimator, nn.Module):
 
         no = expand_to_rank(no, h_ls.dim(), -1)
         # Expand rank of pilots for broadcasting
-        pilots = expand_to_rank(self._pilot_pattern.pilots, h_ls.dim(), 0)
+        pilots = expand_to_rank(self._pilot_pattern.pilots.to(y_pilots.device), h_ls.dim(), 0)
         # Compute error variance, broadcastable to the shape of h_ls
         err_var = torch.nan_to_num(no / (torch.abs(pilots)**2), nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -498,7 +500,7 @@ class NearestNeighborInterpolator(BaseChannelInterpolator):
         # Interpolate through gather. Shape:
         # [num_tx, num_streams_per_tx, num_ofdm_symbols,
         #  ..., num_effective_subcarriers, k, l, m]
-        outputs = gather_pytorch(inputs, self._gather_ind, axis=2, batch_dims=2)
+        outputs = gather_pytorch(inputs, self._gather_ind.to(inputs.device), axis=2, batch_dims=2)
 
         # Transpose outputs to bring batch_dims first again. New shape:
         # [k, l, m, num_tx, num_streams_per_tx,...

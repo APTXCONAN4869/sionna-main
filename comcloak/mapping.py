@@ -999,7 +999,7 @@ class Demapper(nn.Module):
 
         # Reshape constellation points to [1,...,1,num_points]
         points_shape = [1] * y.dim() + list(self.constellation.points.shape)
-        points = torch.reshape(self.constellation.points, points_shape)
+        points = torch.reshape(self.constellation.points.to(y.device), points_shape)
 
         # Compute squared distances from y to all points
         # shape [...,n,num_points]

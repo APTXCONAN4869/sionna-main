@@ -3,55 +3,65 @@ gpu_num = 0 # Use "" to use the CPU
 os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu_num}"
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-# Import sionna
+# Import comcloak
 try:
-    import sionna
+    import comcloak
 except ImportError as e:
-    # Install sionna if package is not already installed
+    # Install comcloak if package is not already installed
     import os
     import sys
     print("Current directory:", os.getcwd())
-    sys.path.append("/home/wzs/Project/sionna-main/")
-    # os.system("pip install sionna")
-    import sionna
+    sys.path.append("/home/wzs/project/sionna-main/")
+    # os.system("pip install comcloak")
+    import comcloak
 
-# Load the required sionna components
+# Load the required comcloak components
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 import time
 
-from sionna.mimo import StreamManagement
+from comcloak.mimo import StreamManagement
 
-from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
-from sionna.ofdm import OFDMModulator, OFDMDemodulator, ZFPrecoder, RemoveNulledSubcarriers
+from comcloak.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
+from comcloak.ofdm import OFDMModulator, OFDMDemodulator, ZFPrecoder, RemoveNulledSubcarriers
 
-from sionna.channel.tr38901 import AntennaArray, CDL, Antenna
-from sionna.channel import subcarrier_frequencies, cir_to_ofdm_channel, cir_to_time_channel, time_lag_discrete_time_channel
-from sionna.channel import ApplyOFDMChannel, ApplyTimeChannel, OFDMChannel, TimeChannel
+from comcloak.channel.tr38901 import AntennaArray, CDL, Antenna
+from comcloak.channel import subcarrier_frequencies, cir_to_ofdm_channel, cir_to_time_channel, time_lag_discrete_time_channel
+from comcloak.channel import ApplyOFDMChannel, ApplyTimeChannel, OFDMChannel, TimeChannel
 
-from sionna.fec.ldpc.encoding import LDPC5GEncoder
-from sionna.fec.ldpc.decoding import LDPC5GDecoder
+from comcloak.fec.ldpc.encoding import LDPC5GEncoder
+from comcloak.fec.ldpc.decoding import LDPC5GDecoder
 
-from sionna.mapping import Mapper, Demapper
+from comcloak.mapping import Mapper, Demapper
 
-from sionna.utils import BinarySource, ebnodb2no, sim_ber
-from sionna.utils.metrics import compute_ber
+from comcloak.utils import BinarySource, ebnodb2no, sim_ber
+from comcloak.utils.metrics import compute_ber
 import tensorflow as tf
+import torch
 # Configure the notebook to use only a single GPU and allocate only as much memory as needed
 # For more details, see https://www.tensorflow.org/guide/gpu
-gpus = tf.config.list_physical_devices('GPU')
-print("Available GPUs:", gpus)
-print(f"可用的GPU数量: {len(gpus)}")
-if gpus:
-    try:
-        tf.config.experimental.set_memory_growth(gpus[0], True)
-    except RuntimeError as e:
-        print(e)
-# Avoid warnings from TensorFlow
-tf.get_logger().setLevel('ERROR')
-sionna.config.xla_compat=False
-
+# gpus = tf.config.list_physical_devices('GPU')
+# print("Available GPUs:", gpus)
+# print(f"可用的GPU数量: {len(gpus)}")
+# if gpus:
+#     try:
+#         tf.config.experimental.set_memory_growth(gpus[0], True)
+#     except RuntimeError as e:
+#         print(e)
+# # Avoid warnings from TensorFlow
+# tf.get_logger().setLevel('ERROR')
+# comcloak.config.xla_compat=False
+# GPU configuration
+if torch.cuda.is_available():
+    num_gpus = torch.cuda.device_count()
+    print(f"检测到 {num_gpus} 块 GPU:")
+    for i in range(num_gpus):
+        print(f"  - GPU {i}: {torch.cuda.get_device_name(i)}")
+    device = torch.device("cuda")  # 默认用第一块 GPU
+else:
+    print("未检测到 GPU,使用 CPU")
+    device = torch.device("cpu")
 
 # Define the number of UT and BS antennas.
 # For the CDL model, that will be used in this notebook, only
@@ -213,7 +223,9 @@ h_time = cir_to_time_channel(rg.bandwidth, *cir, l_min, l_max, normalize=True)
 # insufficiently long cyclic prefix will become visible. This
 # is in contrast to frequency-domain modeling which imposes
 # no inter-symbol interfernce.
-y_time = channel_time([x_time, h_time, no])
+y_time = channel_time([x_time, h_time, no]).to(device)
+
+
 
 # OFDM demodulation and cyclic prefix removal
 y = demodulator(y_time)
@@ -237,6 +249,7 @@ else:
 x_hat, no_eff = lmmse_equ([y, h_hat, err_var, no])
 llr = demapper([x_hat, no_eff])
 b_hat = decoder(llr)
-ber = compute_ber(b, b_hat)
+b_cuda = b.to(device)
+ber = compute_ber(b_cuda, b_hat)
 print("BER: {}".format(ber))
 
