@@ -268,27 +268,27 @@ class CDL(ChannelModel):
 
         ## Topology for generating channel coefficients
         # Sample random velocities
-        # v_r = tf.random.uniform(shape=[batch_size, 1],
-        #                         minval=self._min_speed,
-        #                         maxval=self._max_speed,
-        #                         dtype=self._real_dtype)
-        # v_phi = tf.random.uniform(  shape=[batch_size, 1],
-        #                             minval=0.0,
-        #                             maxval=2.*PI,
-        #                             dtype=self._real_dtype)
-        # v_theta = tf.random.uniform(    shape=[batch_size, 1],
-        #                                 minval=0.0,
-        #                                 maxval=PI,
-        #                                 dtype=self._real_dtype)
-        v_r = tf.convert_to_tensor(np.random.uniform(low=self._min_speed, high=self._max_speed, 
-                                                    size=(batch_size, 1)),
-                                                    dtype=tf.float32)
-        v_phi = tf.convert_to_tensor(np.random.uniform(low=0.0, high=2.*PI, 
-                                                    size=(batch_size, 1)),
-                                                    dtype=tf.float32)
-        v_theta = tf.convert_to_tensor(np.random.uniform(low=0.0, high=PI, 
-                                                    size=(batch_size, 1)),
-                                                    dtype=tf.float32)
+        v_r = tf.random.uniform(shape=[batch_size, 1],
+                                minval=self._min_speed,
+                                maxval=self._max_speed,
+                                dtype=self._real_dtype)
+        v_phi = tf.random.uniform(  shape=[batch_size, 1],
+                                    minval=0.0,
+                                    maxval=2.*PI,
+                                    dtype=self._real_dtype)
+        v_theta = tf.random.uniform(    shape=[batch_size, 1],
+                                        minval=0.0,
+                                        maxval=PI,
+                                        dtype=self._real_dtype)
+        # v_r = tf.convert_to_tensor(np.random.uniform(low=self._min_speed, high=self._max_speed, 
+        #                                             size=(batch_size, 1)),
+        #                                             dtype=tf.float32)
+        # v_phi = tf.convert_to_tensor(np.random.uniform(low=0.0, high=2.*PI, 
+        #                                             size=(batch_size, 1)),
+        #                                             dtype=tf.float32)
+        # v_theta = tf.convert_to_tensor(np.random.uniform(low=0.0, high=PI, 
+        #                                             size=(batch_size, 1)),
+        #                                             dtype=tf.float32)
         velocities = tf.stack([ v_r*cos(v_phi)*sin(v_theta),
                                 v_r*sin(v_phi)*sin(v_theta),
                                 v_r*cos(v_theta)], axis=-1)
@@ -663,11 +663,12 @@ class CDL(ChannelModel):
 
         # Create randomly shuffled indices by arg-sorting samples from a random
         # normal distribution
-        np.random.seed(12345)
-        # random_numbers = tf.random.normal(tf.shape(angles))
-        random_numbers = tf.convert_to_tensor(np.random.normal(loc=0.0, scale=1, 
-                                                    size=angles.shape),
-                                                    dtype=tf.float32)
+        random_numbers = tf.random.normal(tf.shape(angles))
+
+        # np.random.seed(12345)
+        # random_numbers = tf.convert_to_tensor(np.random.normal(loc=0.0, scale=1, 
+        #                                             size=angles.shape),
+        #                                             dtype=tf.float32)
         shuffled_indices = tf.argsort(random_numbers)
         # Shuffling the angles
         shuffled_angles = tf.gather(angles,shuffled_indices, batch_dims=4)

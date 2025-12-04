@@ -16,7 +16,7 @@ except ImportError as e:
     import os
     import sys
     print("Current directory:", os.getcwd())
-    sys.path.append("/home/wzs/project/sionna-main/")
+    sys.path.append("/home/wzs/Project/sionna-main/")
     # os.system("pip install sionna")
     import sionna
 

@@ -69,7 +69,7 @@ lstm_hidden_dim_factor = 8
 num_training_iterations = 10000 # Number of training iterations
 training_batch_size = 128 # Training batch size
 model_weights_path = "./comcloak/training/CSI_sys_weights" # Location to save the neural receiver weights once training is done
-train_log_path = "./comcloak/training/train_log_CSI3.txt"
+train_log_path = "./comcloak/training/training_log/train_log_CSI3.txt"
 ############################################
 ## Evaluation configuration
 results_filename = "CSI_sys_results" # Location to save the results
@@ -400,33 +400,33 @@ class E2ESystem(nn.Module):
 
 # # The end-to-end system equipped with the neural receiver is instantiated for training.
 # # When called, it therefore returns the estimated BMD rate
-model = E2ESystem('CSI-sys', training=True)
+# model = E2ESystem('CSI-sys', training=True)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = model.to(device)
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
+# model = model.to(device)
+# optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-for i in range(num_training_iterations):
-    # Sample Eb/No
-    ebno_db = random.uniform(ebno_db_min, ebno_db_max)
-    ebno_db_tensor = torch.tensor(ebno_db, dtype=torch.float32).to(device)
+# for i in range(num_training_iterations):
+#     # Sample Eb/No
+#     ebno_db = random.uniform(ebno_db_min, ebno_db_max)
+#     ebno_db_tensor = torch.tensor(ebno_db, dtype=torch.float32).to(device)
 
-    # Forward and backward
-    optimizer.zero_grad()
-    loss = model(training_batch_size, ebno_db_tensor)  
-    # loss = -rate  
+#     # Forward and backward
+#     optimizer.zero_grad()
+#     loss = model(training_batch_size, ebno_db_tensor)  
+#     # loss = -rate  
 
-    loss.backward()
-    optimizer.step()
+#     loss.backward()
+#     optimizer.step()
 
-    if i % 10 == 0:
-        print(f"Iteration {i}/{num_training_iterations}  Loss: {loss.item():.4f}", end="\r")
-        with open(train_log_path, "a") as f:
-            f.write(f"{i},{ebno_db:.2f},{loss.item():.6f}\n")
-# Save weights using pickle
-weights = {k: v.cpu() for k, v in model.state_dict().items()}
-with open(model_weights_path, 'wb') as f:
-    pickle.dump(weights, f)
+#     if i % 10 == 0:
+#         print(f"Iteration {i}/{num_training_iterations}  Loss: {loss.item():.4f}", end="\r")
+#         with open(train_log_path, "a") as f:
+#             f.write(f"{i},{ebno_db:.2f},{loss.item():.6f}\n")
+# # Save weights using pickle
+# weights = {k: v.cpu() for k, v in model.state_dict().items()}
+# with open(model_weights_path, 'wb') as f:
+#     pickle.dump(weights, f)
 
 

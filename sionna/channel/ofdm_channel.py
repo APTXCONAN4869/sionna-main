@@ -11,7 +11,6 @@ import tensorflow as tf
 from tensorflow.keras.layers import Layer
 
 from . import GenerateOFDMChannel, ApplyOFDMChannel
-
 class OFDMChannel(Layer):
     # pylint: disable=line-too-long
     r"""OFDMChannel(channel_model, resource_grid, add_awgn=True, normalize_channel=False, return_channel=False, dtype=tf.complex64, **kwargs)
@@ -116,6 +115,7 @@ class OFDMChannel(Layer):
         self._normalize_channel = normalize_channel
         self._return_channel = return_channel
 
+
     def build(self, input_shape): #pylint: disable=unused-argument
 
         self._generate_channel = GenerateOFDMChannel(self._cir_sampler,
@@ -137,7 +137,6 @@ class OFDMChannel(Layer):
             y = self._apply_channel([x, h_freq, no])
         else:
             y = self._apply_channel([x, h_freq])
-
         if self._return_channel:
             return y, h_freq
         else:

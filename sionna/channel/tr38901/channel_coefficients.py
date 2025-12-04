@@ -480,9 +480,9 @@ class ChannelCoefficientsGenerator:
         phi : [shape] + [4], tf.float
             Phases for all polarization combinations
         """
-        # phi = tf.random.uniform(tf.concat([shape, [4]], axis=0), minval=-PI,
-        #     maxval=PI, dtype=self._dtype.real_dtype)
-        phi = np.random.uniform(low=-PI, high=PI, size=tf.concat([shape, [4]], axis=0))
+        phi = tf.random.uniform(tf.concat([shape, [4]], axis=0), minval=-PI,
+            maxval=PI, dtype=self._dtype.real_dtype)
+        # phi = np.random.uniform(low=-PI, high=PI, size=tf.concat([shape, [4]], axis=0))
         phi = tf.convert_to_tensor(phi, dtype=tf.float32)
         return phi
 

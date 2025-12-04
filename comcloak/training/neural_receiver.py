@@ -13,11 +13,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 import random
-from sionna.channel.tr38901 import Antenna, AntennaArray, CDL
-from sionna.channel import OFDMChannel
+from sionna.channel.tr38901 import Antenna, AntennaArray, CDL, TDL
+from sionna.channel import OFDMChannel, ApplyOFDMChannel
 from sionna.mimo import StreamManagement
-from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer, RemoveNulledSubcarriers, ResourceGridDemapper
-from sionna.utils import BinarySource, ebnodb2no, insert_dims, flatten_last_dims, expand_to_rank
+from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, \
+    LMMSEEqualizer, RemoveNulledSubcarriers, ResourceGridDemapper, ZFPrecoder
+from sionna.utils import BinarySource, ebnodb2no, insert_dims, flatten_last_dims, expand_to_rank, log10
 from sionna.fec.ldpc.encoding import LDPC5GEncoder
 from sionna.fec.ldpc.decoding import LDPC5GDecoder
 from sionna.mapping import Mapper, Demapper
@@ -30,17 +31,24 @@ from keras.layers import Layer, LayerNormalization, Conv2D, Conv2DTranspose, Den
 from tensorflow import nn
 from math import ceil
 
-
+from comcloak.training.time_consuming_channel import ChannelMatrix
 ############################################
 ## Channel configuration
-NUM_BS_ANT = 2
-carrier_frequency = 3.5e9 # Hz
-delay_spread = 100e-9 # s
-cdl_model = "C" # CDL model to use
-speed = 10.0 # Speed for evaluation and training [m/s]
+num_ut = 1
+num_bs = 1
+num_ut_ant = 8
+num_bs_ant = 16
+num_streams_per_tx = 4
+rx_tx_association = np.array([[1]])
+
+carrier_frequency = 2.6e9 # Hz
+delay_spread = 300e-9 # s
+cdl_model = "B" # CDL model to use
+tdl_model = "B" # TDL model to use
+speed = 1.0 # Speed for evaluation and training [m/s]
 # SNR range for evaluation and training [dB]
-ebno_db_min = -5.0
-ebno_db_max = 10.0
+ebno_db_min = -15.0
+ebno_db_max = 25.0
 
 ############################################
 ## OFDM waveform configuration
@@ -55,15 +63,19 @@ cyclic_prefix_length = 0 # Simulation in frequency domain. This is useless
 
 ############################################
 ## Modulation and coding configuration
-max_num_bits_per_symbol = 2 # Maximum number of bits per symbol among all MCSs
-mcs_list = ["QPSK", "16QAM"] # List of MCS
+max_num_bits_per_symbol = 6 # Maximum number of bits per symbol among all MCSs
+mcs_list = ["QPSK", "16QAM", "64QAM"] # List of MCS
 coderate = 0.5 # Coderate for LDPC code
-mcs_dict = {
+mcs_dict_order = {
     "QPSK": 2, 
     "16QAM": 4,
+    "64QAM": 6
 }
-embedding = Embedding(input_dim=2, output_dim=8)
-
+mcs_dict = {
+    "QPSK": 0, 
+    "16QAM": 1,
+    "64QAM": 2
+}
 ############################################
 ## Neural receiver configuration
 num_conv_channels = 128 # Number of convolutional channels for the convolutional layers forming the neural receiver
@@ -74,13 +86,46 @@ num_experts = 4 # Number of convolutional kernel experts for the CondConv2D laye
 ############################################
 ## Training configuration
 num_training_iterations = 10000 # Number of training iterations
-training_batch_size = 128 # Training batch size
+training_batch_size = 300 # Training batch size
+batch_size_mcs = training_batch_size // len(mcs_list)
+mcs_id = []
+for m in mcs_list:
+    mcs_id.extend([mcs_dict[m]] * batch_size_mcs)
+mcs_id = tf.constant(mcs_id, dtype=tf.int32)
+
 model_weights_path = "./comcloak/training/Receiver_sys_weights" # Location to save the neural receiver weights once training is done
-train_log_path = "./comcloak/training/train_log/Receiver_log_v0.txt"
+train_log_path = "./comcloak/training/train_log/nrx_log/Receiver_log_v0.txt"
 ############################################
 ## Evaluation configuration
 results_filename = "Receiver_sys_results" # Location to save the results
 ############################################
+
+
+stream_manager = StreamManagement(np.array([[1]]), # Receiver-transmitter association matrix
+                                  1)               # One stream per transmitter
+resource_grid = ResourceGrid(num_ofdm_symbols = num_ofdm_symbols,
+                             fft_size = fft_size,
+                             subcarrier_spacing = subcarrier_spacing,
+                             num_tx = 1,
+                             num_streams_per_tx = num_streams_per_tx,
+                             cyclic_prefix_length = cyclic_prefix_length,
+                             dc_null = dc_null,
+                             pilot_pattern = pilot_pattern,
+                             pilot_ofdm_symbol_indices = pilot_ofdm_symbol_indices,
+                             num_guard_carriers = num_guard_carriers)
+
+ut_array = AntennaArray(num_rows=1,
+                        num_cols=int(num_ut_ant/2),
+                        polarization="dual",
+                        polarization_type="cross",
+                        antenna_pattern="38.901",
+                        carrier_frequency=carrier_frequency)
+bs_array = AntennaArray(num_rows=1,
+                        num_cols=int(num_bs_ant/2),
+                        polarization="dual",
+                        polarization_type="cross",
+                        antenna_pattern="38.901",
+                        carrier_frequency=carrier_frequency)
 
 class FiLM(Layer):
     def __init__(self, feature_dim, cond_dim):
@@ -104,25 +149,25 @@ class CondConv2D(Layer):
     def __init__(self, filters, kernel_size, num_experts, cond_dim, strides=1, padding="same"):
         super(CondConv2D, self).__init__()
         self.filters = filters
-        self.kernel_size = kernel_size if isinstance(kernel_size, tuple) else (kernel_size, kernel_size)
+        self.kernel_size = kernel_size if isinstance(kernel_size, list) else (kernel_size, kernel_size)
         self.num_experts = num_experts
         self.cond_dim = cond_dim
         self.strides = strides
         self.padding = padding.upper()  # "SAME" or "VALID"
 
         # K kernel experts every single one trainable
-        self.expert_kernels = self.add_weight(
-            shape=(num_experts, self.kernel_size[0], self.kernel_size[1], None, self.filters),
-            initializer="glorot_uniform",
-            trainable=True,
-            name="expert_kernels"
-        )
-        self.expert_bias = self.add_weight(
-            shape=(num_experts, self.filters),
-            initializer="zeros",
-            trainable=True,
-            name="expert_bias"
-        )
+        # self.expert_kernels = self.add_weight(
+        #     shape=(num_experts, self.kernel_size[0], self.kernel_size[1], None, self.filters),
+        #     initializer="glorot_uniform",
+        #     trainable=True,
+        #     name="expert_kernels"
+        # )
+        # self.expert_bias = self.add_weight(
+        #     shape=(num_experts, self.filters),
+        #     initializer="zeros",
+        #     trainable=True,
+        #     name="expert_bias"
+        # )
 
         # Conditional network -> α (softmax to ensure sum to 1)
         self.alpha_layer = Dense(num_experts, activation="softmax")
@@ -135,6 +180,12 @@ class CondConv2D(Layer):
             initializer="glorot_uniform",
             trainable=True,
             name="expert_kernels"
+        )
+        self.expert_bias = self.add_weight(
+            shape=(self.num_experts, self.filters),
+            initializer="zeros",
+            trainable=True,
+            name="expert_bias"
         )
     
     def call(self, inputs, cond):
@@ -165,31 +216,6 @@ class CondConv2D(Layer):
         
         return tf.concat(outputs, axis=0)
 
-
-stream_manager = StreamManagement(np.array([[1]]), # Receiver-transmitter association matrix
-                                  1)               # One stream per transmitter
-resource_grid = ResourceGrid(num_ofdm_symbols = num_ofdm_symbols,
-                             fft_size = fft_size,
-                             subcarrier_spacing = subcarrier_spacing,
-                             num_tx = 1,
-                             num_streams_per_tx = 1,
-                             cyclic_prefix_length = cyclic_prefix_length,
-                             dc_null = dc_null,
-                             pilot_pattern = pilot_pattern,
-                             pilot_ofdm_symbol_indices = pilot_ofdm_symbol_indices,
-                             num_guard_carriers = num_guard_carriers)
-
-ut_antenna = Antenna(polarization="single",
-                     polarization_type="V",
-                     antenna_pattern="38.901",
-                     carrier_frequency=carrier_frequency)
-
-bs_array = AntennaArray(num_rows=1,
-                        num_cols=int(NUM_BS_ANT/2),
-                        polarization="dual",
-                        polarization_type="VH",
-                        antenna_pattern="38.901",
-                        carrier_frequency=carrier_frequency)
 class ResidualBlock(Layer):
     r"""
     This Keras layer implements a convolutional residual block made of two convolutional layers with ReLU activation, layer normalization, and a skip connection.
@@ -210,11 +236,11 @@ class ResidualBlock(Layer):
 
         # Layer normalization is done over the last three dimensions: time, frequency, conv 'channels'
         self._layer_norm_1 = LayerNormalization(axis=(-1, -2, -3))
-        self._conv_1 = CondConv2D(filters=num_conv_channels, kernel_size=3, num_experts=4, cond_dim=16)
-        # self._conv_1 = Conv2D(filters=num_conv_channels,
-        #                       kernel_size=[3,3],
-        #                       padding='same',
-        #                       activation=None)
+        # self._conv_1 = CondConv2D(filters=num_conv_channels, kernel_size=3, num_experts=4, cond_dim=16)
+        self._conv_1 = Conv2D(filters=num_conv_channels,
+                              kernel_size=[3,3],
+                              padding='same',
+                              activation=None)
         # Layer normalization is done over the last three dimensions: time, frequency, conv 'channels'
         self._layer_norm_2 = LayerNormalization(axis=(-1, -2, -3))
         self._conv_2 = Conv2D(filters=num_conv_channels,
@@ -262,47 +288,49 @@ class Receiver_Network(Model):
     def build(self, input_shape):
 
         # Input convolution
-        self._input_conv = CondConv2D(filters=num_conv_channels,
-                                    kernel_size=[3,3],
-                                    num_experts=num_experts,
-                                    cond_dim=4)
+        self._input_conv = Conv2D(filters=num_conv_channels,
+                                   kernel_size=[3,3],
+                                   padding='same',
+                                   activation=None)
         # Residual blocks
         self._res_block_1 = ResidualBlock()
         self._res_block_2 = ResidualBlock()
         self._res_block_3 = ResidualBlock()
         self._res_block_4 = ResidualBlock()
         # Output conv
-        self._output_conv = Conv2D(filters=max_num_bits_per_symbol,
-                                   kernel_size=[3,3],
-                                   padding='same',
-                                   activation=None)
+        self._output_conv = CondConv2D(filters=max_num_bits_per_symbol,
+                                    kernel_size=[3,3],
+                                    num_experts=num_experts,
+                                    cond_dim=4)
 
     def call(self, inputs):
         y, no = inputs
 
         # Feeding the noise power in log10 scale helps with the performance
-        no = nn.log10(no)
+        no = log10(no)
 
         # Stacking the real and imaginary components of the different antennas along the 'channel' dimension
         y = tf.transpose(y, [0, 2, 3, 1]) # Putting antenna dimension last
         no = insert_dims(no, 3, 1)
-        no = tf.tile(no, [1, y.shape[1], y.shape[2], 1])
-        # z : [batch size, num ofdm symbols, num subcarriers, 2*num rx antenna + 1]
+        no = tf.tile(no, [1, y.shape[1], y.shape[2], 1])# Feeding the noise power helps with the performance
+        # z : [batch size, num ofdm symbols, num subcarriers, 2*rx_ant + 1]
         z = tf.concat([tf.math.real(y),
                        tf.math.imag(y),
                        no], axis=-1)
         # Input conv
-        mcs_id = tf.constant([0, 1, 2, 3])  # 0=BPSK, 1=QPSK, 2=16QAM, 3=64QAM
-        embedding = tf.keras.layers.Embedding(input_dim=4, output_dim=8)
+        embedding = Embedding(input_dim=3, output_dim=8)
+        # [batch size, cond_dim]
         cond_vec = embedding(mcs_id)
-        z = self._input_conv(z, cond_vec)
+        z = self._input_conv(z)
+        # [batch size, num ofdm symbols, num subcarriers, num conv channels]
         # Residual blocks
         z = self._res_block_1(z)
         z = self._res_block_2(z)
         z = self._res_block_3(z)
         z = self._res_block_4(z)
         # Output conv
-        z = self._output_conv(z)
+        # [batch_size, num_ofdm_symbols, fft_size, num_bits_per_symbol]
+        z = self._output_conv(z, cond_vec)
 
         return z
 
@@ -315,29 +343,36 @@ class E2ESystem(Model):
         ######################################
         ## Channel
         # A 3GPP CDL channel model is used
-        cdl = CDL(cdl_model, delay_spread, carrier_frequency,
-                  ut_antenna, bs_array, "downlink", min_speed=speed)
-        self._channel = OFDMChannel(cdl, resource_grid, normalize_channel=True, return_channel=True)
-
+        # cdl = CDL(cdl_model, delay_spread, carrier_frequency,
+        #           ut_array, bs_array, "downlink", min_speed=speed)
+        self._channel_model = CDL(cdl_model, delay_spread, carrier_frequency,
+                  ut_array, bs_array, "downlink", min_speed=speed)
+        self._channel_model = TDL(tdl_model, delay_spread, carrier_frequency,
+                  num_rx_ant=num_ut_ant, num_tx_ant=num_bs_ant, min_speed=speed)
+        
+        # self._channel = OFDMChannel(cdl, resource_grid, normalize_channel=True, return_channel=True, precoder=True)
+        self._channel = ChannelMatrix(resource_grid, training_batch_size, num_ut, num_bs)
+        self._channel_freq = ApplyOFDMChannel(add_awgn=True)
         ######################################
         ## Transmitter
         self._binary_source = BinarySource()
 
         if training:
-            self._num_bits_per_symbol = [mcs_dict[mcs] for mcs in mcs_list]
+            self._num_bits_per_symbol = [mcs_dict_order[mcs] for mcs in mcs_list]
             self._n, self._k, self._encoder, self._mapper = [], [], [], []
-            
-            for mcs_name, num_bits_per_symbol in zip(mcs_list, self._num_bits_per_symbol):
+            self._num_mcs_supported = len(mcs_list)
+            # for mcs_name, num_bits_per_symbol in zip(mcs_list, self._num_bits_per_symbol):
+            for num_bits_per_symbol in self._num_bits_per_symbol:
                 n = int(resource_grid.num_data_symbols * num_bits_per_symbol)
                 k = int(n * coderate)
                 self._n.append(n)
                 self._k.append(k)
                 self._encoder.append(LDPC5GEncoder(k, n))
-                self._mapper.append(Mapper(mcs_name, num_bits_per_symbol))
+                self._mapper.append(Mapper("qam", num_bits_per_symbol))
 
         self._rg_mapper = ResourceGridMapper(resource_grid)
-
-
+        self._rg_demapper = ResourceGridDemapper(resource_grid, stream_manager)
+        self._zf_precoder = ZFPrecoder(resource_grid, stream_manager, return_effective_channel=True)
         ######################################
         ## Receiver
         # Three options for the receiver depending on the value of `system`
@@ -347,7 +382,7 @@ class E2ESystem(Model):
             elif system == 'baseline-ls-estimation': # LS estimation
                 self._ls_est = LSChannelEstimator(resource_grid, interpolation_type="nn")
             # Components required by both baselines
-            self._lmmse_equ = LMMSEEqualizer(resource_grid, stream_manager, )
+            self._lmmse_equ = LMMSEEqualizer(resource_grid, stream_manager)
             self._demapper = Demapper("app", "qam", self._num_bits_per_symbol) #problem here
         elif system == "neural-receiver": # Neural receiver
             self._receiver_sys = Receiver_Network()
@@ -357,10 +392,10 @@ class E2ESystem(Model):
         for idx in range(len(mcs_list)):
             self._decoder.append(LDPC5GDecoder(self._encoder[idx], hard_out=True))
 
-    def forward(self, batch_size, ebno_db):
+    def __call__(self, batch_size, ebno_db):
 
         # If `ebno_db` is a scalar, a tensor with shape [batch size] is created as it is what is expected by some layers
-        batch_size_mcs = batch_size // len(mcs_list)
+        
         if len(ebno_db.shape) == 0:
             ebno_db = tf.fill([batch_size_mcs], ebno_db)
 
@@ -370,23 +405,28 @@ class E2ESystem(Model):
         for idx in range(len(mcs_list)):
             no_mcs.append(ebnodb2no(ebno_db, self._num_bits_per_symbol[idx], coderate))
             #     c = self._binary_source([batch_size, 1, 1, n])
-            b_mcs.append(self._binary_source([batch_size_mcs, 1, 1, self._k[idx]]))
-            c_mcs.append(self._encoder(b_mcs[idx]))# [batch_size_mcs, 1, 1, self._n[idx]]
+            b_mcs.append(self._binary_source([batch_size_mcs, 1, num_streams_per_tx, self._k[idx]]))
+            c_mcs.append(self._encoder[idx](b_mcs[idx]))# [batch_size_mcs, 1, num_streams_per_tx, self._n[idx]]
             # Modulation
-            x_mcs.append(self._mapper[idx](c_mcs[idx])) # [batch_size_mcs, 1, 1, n/Constellation.num_bits_per_symbol]
+            x_mcs.append(self._mapper[idx](c_mcs[idx])) # [batch_size_mcs, 1, num_streams_per_tx, n/Constellation.num_bits_per_symbol]
         # b = tf.concat(b_mcs, axis=0) # last dim is different for different mcs, so cannot concat
         # c = tf.concat(c_mcs, axis=0) # same here
         no = tf.concat(no_mcs, axis=0) # [batch size]    
-        x = tf.concat(x_mcs, axis=-1) # [batch size, 1, 1, n/Constellation.num_bits_per_symbol]
+        x = tf.concat(x_mcs, axis=0) # [batch size, 1, num_streams_per_tx, n/Constellation.num_bits_per_symbol]
         
         # Mapping to the resource grid
         x_rg = self._rg_mapper(x)
-
+        
         ######################################
         ## Channel
         # A batch of new channel realizations is sampled and applied at every inference
         no_ = expand_to_rank(no, tf.rank(x_rg))
-        y, h = self._channel([x_rg, no_])
+
+        h_freq = self._channel(self._channel_model)
+        x_rg, g = self._zf_precoder([x_rg, h_freq])
+        y = self._channel_freq([x_rg, h_freq, no_])
+        # y shape: [batch size, num_rx, num_rx_ant, num_ofdm_symbols, fft_size]
+        # y, h = self._channel([x_rg, no_])
 
         ######################################
         ## Receiver
@@ -403,9 +443,18 @@ class E2ESystem(Model):
         elif self._system == "neural-receiver":
             # The neural receiver computes LLRs from the frequency domain received symbols and N0
             y = tf.squeeze(y, axis=1)
-            llrs = self._receiver_sys([y, no])
+            # y shape: [batch_size, rx_ant, num_ofdm_symbols, fft_size]
+            llrs = self._receiver_sys([y, no])# Feeding the noise power in log10 scale helps with the performance
+            # llrs shape: [batch_size, num_ofdm_symbols, fft_size, num_bits_per_symbol]
+            # For traditional equalizer we use demmaper because it returns datasymbols only but not here
+            # So we need to use resource grid demapper to extract data-carrying REs
+            llr = insert_dims(llr, 2, 1)# [batch_size, 1, 1, num_ofdm_symbols, fft_size, num_bits_per_symbol]
+            # expect input: [batch_size, num_rx, num_streams_per_rx, num_ofdm_symbols, fft_size, data_dim]
+            # output: [batch_size, num_rx, num_streams_per_rx, num_data_symbols, data_dim]
+            llr = self._rg_demapper(llrs)
+
             llrs_ = []
-            for idx in range(self._num_mcss_supported):
+            for idx in range(self._num_mcs_supported):
                 llrs_mcs = tf.gather(
                                 llrs,
                                 indices=tf.range(self._num_bits_per_symbol[idx]),

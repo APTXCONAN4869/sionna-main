@@ -69,7 +69,7 @@ lstm_hidden_dim_factor = 8
 num_training_iterations = 10000 # Number of training iterations
 training_batch_size = 128 # Training batch size
 model_weights_path = "./comcloak/training/CSI_sys_weights" # Location to save the neural receiver weights once training is done
-train_log_path = "./comcloak/training/train_log_CSI3.txt"
+train_log_path = "./comcloak/training/training_log/train_log_CSI3.txt"
 ############################################
 ## Evaluation configuration
 results_filename = "CSI_sys_results" # Location to save the results
