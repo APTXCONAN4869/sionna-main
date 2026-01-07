@@ -20,3 +20,4 @@ nohup.out
 /*.obj
 dist/
 comcloak/training/CSI_sys_weights
+comcloak/training/weights/
