@@ -39,6 +39,7 @@ from comcloak.utils import BinarySource, ebnodb2no, sim_ber
 from comcloak.utils.metrics import compute_ber
 import tensorflow as tf
 import torch
+import scipy.io as sio
 # Configure the notebook to use only a single GPU and allocate only as much memory as needed
 # For more details, see https://www.tensorflow.org/guide/gpu
 # gpus = tf.config.list_physical_devices('GPU')
@@ -86,6 +87,9 @@ rx_tx_association = np.array([[1]])
 # In this simple setup, this is fairly easy. However, it can get more involved
 # for simulations with many transmitters and receivers.
 sm = StreamManagement(rx_tx_association, num_streams_per_tx)
+fft_size=64
+cyclic_prefix_length=16
+num_ofdm_symbols=14
 rg = ResourceGrid(num_ofdm_symbols=14,
                   fft_size=64,
                   subcarrier_spacing=15e3,
@@ -98,7 +102,7 @@ rg = ResourceGrid(num_ofdm_symbols=14,
                   pilot_ofdm_symbol_indices=[2,11])
 
 
-carrier_frequency = 2.6e9 # Carrier frequency in Hz.
+carrier_frequency = 3.9e9 # Carrier frequency in Hz.
                           # This is needed here to define the antenna element spacing.
 
 ut_array = AntennaArray(num_rows=1,
@@ -134,21 +138,21 @@ cdl = CDL(cdl_model, delay_spread, carrier_frequency, ut_array, bs_array, direct
 
 # The following values for truncation are recommended.
 # Please feel free to tailor them to you needs.
-l_min, l_max = time_lag_discrete_time_channel(rg.bandwidth)
-l_tot = l_max-l_min+1
-a, tau = cdl(batch_size=2, num_time_steps=rg.num_time_samples+l_tot-1, sampling_frequency=rg.bandwidth)
+# l_min, l_max = time_lag_discrete_time_channel(rg.bandwidth)
+# l_tot = l_max-l_min+1
+# a, tau = cdl(batch_size=2, num_time_steps=rg.num_time_samples+l_tot-1, sampling_frequency=rg.bandwidth)
 
-print("Shape of the path gains: ", a.shape)
-print("Shape of the delays:", tau.shape)
+# print("Shape of the path gains: ", a.shape)
+# print("Shape of the delays:", tau.shape)
 frequencies = subcarrier_frequencies(rg.fft_size, rg.subcarrier_spacing)
-h_freq = cir_to_ofdm_channel(frequencies, a, tau, normalize=True)
+# h_freq = cir_to_ofdm_channel(frequencies, a, tau, normalize=True)
 # Function that will apply the channel frequency response to an input signal
 channel_freq = ApplyOFDMChannel(add_awgn=True)
 # Function that will apply the discrete-time channel impulse response to an input signal
-channel_time = ApplyTimeChannel(rg.num_time_samples, l_tot=l_tot, add_awgn=True)
+# channel_time = ApplyTimeChannel(rg.num_time_samples, l_tot=l_tot, add_awgn=True)
 
 
-num_bits_per_symbol = 6 # QPSK modulation
+num_bits_per_symbol = 2 # QPSK modulation
 coderate = 0.5 # Code rate
 n = int(rg.num_data_symbols*num_bits_per_symbol) # Number of coded bits
 k = int(n*coderate) # Number of information bits
@@ -170,6 +174,7 @@ zf_precoder = ZFPrecoder(rg, sm, return_effective_channel=True)
 
 # OFDM modulator and demodulator
 modulator = OFDMModulator(rg.cyclic_prefix_length)
+l_min = 0  # Should be set according to the channel model used
 demodulator = OFDMDemodulator(rg.fft_size, l_min, rg.cyclic_prefix_length)
 
 # This function removes nulled subcarriers from any tensor having the shape of a resource grid
@@ -188,79 +193,47 @@ demapper = Demapper("app", "qam", num_bits_per_symbol)
 decoder = LDPC5GDecoder(encoder, hard_out=True)
 
 batch_size = 8 # We pick a small batch_size as executing this code in Eager mode could consume a lot of memory
-ebno_db = 30
-perfect_csi = False
+ebno_db = 10
 
 no = ebnodb2no(ebno_db, num_bits_per_symbol, coderate, rg)
 b = binary_source([batch_size, 1, rg.num_streams_per_tx, encoder.k])
 c = encoder(b)
-
-# b = torch.zeros([batch_size, 1, rg.num_streams_per_tx, n])
-# c = b
-
 x = mapper(c)
 x_rg = rg_mapper(x)
 
-# Apply pilot masking (optional)
-# mask = torch.zeros_like(x_rg)
-# pilot_indices = [2, 11]
-# mask[:, :, :, pilot_indices, :] = 1
-# x_rg = x_rg * mask
-
 cir = cdl(batch_size, rg.num_ofdm_symbols, 1/rg.ofdm_symbol_duration)
 h_freq = cir_to_ofdm_channel(frequencies, *cir, normalize=True)
+x_rg, g = zf_precoder([x_rg, h_freq])
 
-# x_rg, g = zf_precoder([x_rg, h_freq])
-
-
-# The CIR needs to be sampled every 1/bandwith [s].
-# In contrast to frequency-domain modeling, this implies
-# that the channel can change over the duration of a single
-# OFDM symbol. We now also need to simulate more
-# time steps.
-cir = cdl(batch_size, rg.num_time_samples+l_tot-1, rg.bandwidth)
 
 # OFDM modulation with cyclic prefix insertion
 x_time = modulator(x_rg)
-torch.save(x_time, 'D:\\sionna-main\\practical\\wave_data64QAM.pt')
-# Compute the discrete-time channel impulse reponse
-h_time = cir_to_time_channel(rg.bandwidth, *cir, l_min, l_max, normalize=True)
-
-# Compute the channel output
-# This computes the full convolution between the time-varying
-# discrete-time channel impulse reponse and the discrete-time
-# transmit signal. With this technique, the effects of an
-# insufficiently long cyclic prefix will become visible. This
-# is in contrast to frequency-domain modeling which imposes
-# no inter-symbol interfernce.
-y_time = channel_time([x_time, h_time, no]).to(device)
-
-
-# ch1 = np.load('D:\\sionna-main\\practical\\ch1.npy')
-# y_rx_time = torch.tensor(ch1[485:], dtype=torch.complex64).to(device)
-# y_rx = y_rx_time[:batch_size*num_bs_ant*1135].reshape(batch_size, num_bs, num_bs_ant, -1)
-# y = demodulator(y_rx)
-
+# torch.save(x_time, 'D:\\sionna-main\\practical\\wave_data.pt')
+x_signal = torch.load('D:\\sionna-main\\practical\\wave_data64.pt')
+mat = sio.loadmat("d:/sionna-main/practical/adc_data1.mat")
+adc_data = mat["adc_data"]
+y_time = torch.tensor(adc_data, dtype=torch.complex64).to(device).T
+y_time = y_time[0]
+precusor_length = 338
+y_time = y_time[precusor_length:precusor_length+num_ofdm_symbols*(cyclic_prefix_length+fft_size)*batch_size]
+y_time = y_time.reshape(batch_size, 1, 1, -1)
 # OFDM demodulation and cyclic prefix removal
 y = demodulator(y_time)
 
-if perfect_csi:
-    
-    a, tau = cir
-    
-    # We need to sub-sample the channel impulse reponse to compute perfect CSI
-    # for the receiver as it only needs one channel realization per OFDM symbol
-    a_freq = a[...,rg.cyclic_prefix_length:-1:(rg.fft_size+rg.cyclic_prefix_length)]
-    a_freq = a_freq[...,:rg.num_ofdm_symbols]
-    
-    # Compute the channel frequency response
-    h_freq = cir_to_ofdm_channel(frequencies, a_freq, tau, normalize=True)
-   
-    h_hat, err_var = remove_nulled_scs(h_freq), 0.
-else:
-    h_hat, err_var = ls_est ([y, no])
+
+
+h_hat, err_var = ls_est ([y, no])
 
 x_hat, no_eff = lmmse_equ([y, h_hat, err_var, no])
+plt.figure(figsize=(8,8))
+plt.axes().set_aspect(1)
+plt.grid(True)
+plt.title('Channel output')
+plt.xlabel('Real Part')
+plt.ylabel('Imaginary Part')
+plt.scatter(tf.math.real(x_hat), tf.math.imag(x_hat))
+plt.tight_layout()
+
 llr = demapper([x_hat, no_eff])
 b_hat = decoder(llr)
 b_cuda = b.to(device)

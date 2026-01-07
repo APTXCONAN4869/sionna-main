@@ -438,13 +438,13 @@ class ResourceGridMapper(nn.Module):
         index = tuple(self._data_ind.t())
         # print("template:",template)
         # print(template.device)
-        template2 = torch.tensor(template)
+        # template2 = torch.tensor(template)
         # print(template.device)
         # print(torch.equal(template, template2))
         rg = template.clone() 
         # print("rg:",rg)
         # print(torch.equal(template, rg))
-        sub_val1 = template - rg
+        # sub_val1 = template - rg
 
         # print(inputs.dtype)
         # print(rg.dtype)
@@ -463,7 +463,7 @@ class ResourceGridMapper(nn.Module):
         # print("====================================")
         # print(rg)
         template[index] = inputs
-        sub_val2 = template - rg
+        # sub_val2 = template - rg
 
         # print("========Sub val 2 is: ==============")
         # print(sub_val2.sum())

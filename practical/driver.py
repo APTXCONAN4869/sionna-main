@@ -7,16 +7,16 @@ def rx_read_adc_data(sock, adc_length):
     buf = b''
     while len(buf) < total_bytes:
         buf += sock.recv(total_bytes - len(buf))
-
     # 转成 numpy array
+
     data = np.frombuffer(buf, dtype=np.uint8)
 
     # 2. reshape 成 (4, adc_length*16)
-    data = data.reshape(4, adc_length * 16)
+    data = data.reshape(4, adc_length * 16, order='F')
 
     # 3. 取 I 和 Q
-    I_bytes = data[0:2, :].reshape(-1)
-    Q_bytes = data[2:4, :].reshape(-1)
+    I_bytes = data[0:2, :].reshape(-1, order='F') # Fortran order（列优先）
+    Q_bytes = data[2:4, :].reshape(-1, order='F')
 
     # 4. 小端解码成 int16
     I = np.frombuffer(I_bytes.tobytes(), dtype='<i2')  # <i2: little-endian int16
@@ -24,9 +24,10 @@ def rx_read_adc_data(sock, adc_length):
 
     # 5. 转成复数
     adc_complex = I.astype(np.float64) + 1j * Q.astype(np.float64)
-
+    # np.save("buf.npy", adc_complex)
     # 6. reshape 成 (adc_length, 16)
-    adc_complex = adc_complex.reshape(adc_length, 16)
+    adc_complex = adc_complex.reshape(adc_length, 16) # 数据提取顺序不同
+    # adc_complex = adc_complex.reshape(16, adc_length).T  # 转置成 (adc_length, 16)
 
     return adc_complex
 
@@ -66,7 +67,7 @@ def tx_write_dac_data(sock, dac_iq_data, dac_length):
     sock.sendall(out)
 
     # 再次读回 FPGA 对波形写入的 ACK
-    sock.recv(4)
+    return sock.recv(4)
        
 
 def send_and_recv(sock, data, resp_len=4):
@@ -114,3 +115,4 @@ def tx_set_dac_start(sock):
 
     data = head + pkg_type + zero_pad
     return send_and_recv(sock, data)
+ 

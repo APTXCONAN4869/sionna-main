@@ -359,7 +359,8 @@ class Constellation(nn.Module):
                                                         dtype=get_real_dtype(self._dtype)), 
                                                         requires_grad=True)
             else:
-                self._points = torch.tensor(points, dtype=get_real_dtype(self._dtype))
+                # self._points = torch.tensor(points, dtype=get_real_dtype(self._dtype))
+                self._points = points
         x = self._points
         x = torch.complex(x[0], x[1])
         if self._center:
@@ -1006,8 +1007,10 @@ class Demapper(nn.Module):
         squared_dist = torch.abs(y.unsqueeze(-1) - points) ** 2
 
         # Add a dummy dimension for broadcasting
-        
-        no = torch.tensor(no).unsqueeze(-1)
+        if isinstance(no, torch.Tensor):
+            no = no.unsqueeze(-1)
+        else:
+            no = torch.tensor(no).unsqueeze(-1)
         no = torch.maximum(no, self._no_threshold)
 
         # Compute exponents

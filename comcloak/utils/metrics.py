@@ -102,6 +102,9 @@ def compute_ber(b, b_hat):
             A scalar, the BER.
     """
     ber = torch.not_equal(b, b_hat)
-    ber = torch.tensor(ber, dtype=torch.float64) # torch.float64 to suport large batch-sizes
+    if isinstance(ber, torch.Tensor):
+        ber = ber.to(torch.float64)
+    else:
+        ber = torch.tensor(ber, dtype=torch.float64) # torch.float64 to suport large batch-sizes
     return torch.mean(ber)
 

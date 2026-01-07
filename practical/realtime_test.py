@@ -4,7 +4,7 @@ import threading
 import queue
 import numpy as np
 import torch
-
+from math import ceil
 
 import os
 gpu_num = 0 # Use "" to use the CPU
@@ -45,6 +45,7 @@ from comcloak.mapping import Mapper, Demapper
 
 from comcloak.utils import BinarySource, ebnodb2no, sim_ber
 from comcloak.utils.metrics import compute_ber
+from practical.frame_process import BinaryFramePacker, BinaryFrameUnpacker
 import tensorflow as tf
 # Configure the notebook to use only a single GPU and allocate only as much memory as needed
 # For more details, see https://www.tensorflow.org/guide/gpu
@@ -73,14 +74,11 @@ else:
 # ========================
 # 参数配置
 # ========================
-sample_rate = 600e6 / 16  # 假设网口总速率600Mbps，I/Q各16位=4字节/sample，约37.5MS/s
-send_interval = 1e-3       # producer 每 1 ms 发送一次（可以改）
-samples_per_chunk = int(sample_rate * send_interval)
 
 # 形状配置
 rx_ant = 1
 symbols_per_slot = 1135    # 每帧 1135 个复样点
-batch_size = 500             # 堆叠成 [batch_size, 1, rx_ant, 1135]
+batch_size = 400             # 堆叠成 [batch_size, 1, rx_ant, 1135]
 frame_shape = (rx_ant, symbols_per_slot, 2)  # 最后一维 [I, Q]
 dtype = np.int16
 # 队列容量
@@ -117,6 +115,9 @@ rg = ResourceGrid(num_ofdm_symbols=14,
                 pilot_pattern="kronecker",
                 pilot_ofdm_symbol_indices=[2,11])
 
+
+
+
 num_bits_per_symbol = 2 # QPSK modulation
 coderate = 0.5 # Code rate
 n = int(rg.num_data_symbols*num_bits_per_symbol) # Number of coded bits
@@ -125,8 +126,24 @@ k = int(n*coderate) # Number of information bits
 
 ebno_db = 10
 no = ebnodb2no(ebno_db, num_bits_per_symbol, coderate, rg)
-encoder = LDPC5GEncoder(k, n)
 
+
+####################################
+
+# The encoder maps information bits to coded bits
+encoder = LDPC5GEncoder(k, n)
+# The mapper maps blocks of information bits to constellation symbols
+mapper = Mapper("qam", num_bits_per_symbol)
+
+# The resource grid mapper maps symbols onto an OFDM resource grid
+rg_mapper = ResourceGridMapper(rg)
+
+# The zero forcing precoder precodes the transmit stream towards the intended antennas
+zf_precoder = ZFPrecoder(rg, sm, return_effective_channel=True)
+
+# OFDM modulator and demodulator
+modulator = OFDMModulator(rg.cyclic_prefix_length)
+####################################
 l_min = torch.tensor(0, dtype=torch.int32)
 demodulator = OFDMDemodulator(rg.fft_size, l_min, rg.cyclic_prefix_length)
 # The LS channel estimator will provide channel estimates and error variances
@@ -138,24 +155,64 @@ demapper = Demapper("app", "qam", num_bits_per_symbol)
 # The decoder provides hard-decisions on the information bits
 decoder = LDPC5GDecoder(encoder, hard_out=True)
 
-
+####################################
 stop_flag = threading.Event()
+bits_per_slot=encoder.k
+slots_per_frame=8
+packer = BinaryFramePacker("d:/sionna-main/practical/file.png", 
+                            bits_per_slot=bits_per_slot,
+                            slots_per_frame=slots_per_frame)
+frames = packer.pack()
+unpacker = BinaryFrameUnpacker()
+
+
+b = torch.cat(frames, dim=0)  # [num_frames,1,1,624]
+c = encoder(b)
+x = mapper(c)
+x_rg = rg_mapper(x)
+
+# cir = cdl(batch_size, rg.num_ofdm_symbols, 1/rg.ofdm_symbol_duration)
+# h_freq = cir_to_ofdm_channel(frequencies, *cir, normalize=True)
+# x_rg, g = zf_precoder([x_rg, h_freq])
+
+# OFDM modulation with cyclic prefix insertion
+x_time = modulator(x_rg)
+
+
+
+
+ptr = 0
+batch_frames = []
+while ptr<x_time.shape[0]:   
+    batch_frames.append(x_time[ptr:ptr+slots_per_frame])
+    ptr += slots_per_frame
 # ========================
 # 模拟 Producer（发送端）
 # ========================
 def producer():
+    # frame_id = 0
+    # rng = np.random.default_rng()
+    # print("[Producer] start")
+    # while not stop_flag.is_set():
+    #     # 模拟 16-bit I/Q 数据 [-32768, 32767]
+    #     data = rng.integers(-32768, 32768, size=frame_shape, dtype=dtype)
+    #     try:
+    #         data_queue.put_nowait((frame_id, data))
+    #     except queue.Full:
+    #         print(f"[WARN] Queue full, drop frame {frame_id}")
+    #     frame_id += 1
+    #     time.sleep(0.01)  # 模拟实时速率
+    
     frame_id = 0
-    rng = np.random.default_rng()
-    print("[Producer] start")
     while not stop_flag.is_set():
-        # 模拟 16-bit I/Q 数据 [-32768, 32767]
-        data = rng.integers(-32768, 32768, size=frame_shape, dtype=dtype)
+        frame = batch_frames[frame_id % len(batch_frames)]
         try:
-            data_queue.put_nowait((frame_id, data))
+            data_queue.put_nowait((frame_id, frame))
         except queue.Full:
             print(f"[WARN] Queue full, drop frame {frame_id}")
         frame_id += 1
-        time.sleep(send_interval)  # 模拟实时速率
+        time.sleep(0.01)  # 模拟实时速率
+
     print("[Producer] exit")
 
 # ========================
@@ -173,34 +230,42 @@ def consumer():
             # -------------------------
             # 数据转换：int16 → float32 → complex
             # # -------------------------
-            data_f32 = data.astype(np.float32) / 32768.0
-            complex_tensor = data_f32[...,0] + 1j * data_f32[...,1]
-            buffer.append(complex_tensor)
+            # data_f32 = data.astype(np.float32) / 32768.0
+            # complex_tensor = data_f32[...,0] + 1j * data_f32[...,1]
+            buffer.append(data)
 
             # 当累积 batch_size 帧时堆叠处理
-            if len(buffer) == batch_size:
-                batch = np.stack(buffer, axis=0)   # [8,16,1120]
+            if len(buffer) == ceil(batch_size/slots_per_frame):
+                batch = torch.cat(buffer, axis=0)# .to(device)
                 buffer.clear()
 
-                # 转成 torch 张量并添加 [8, 1, 16, 1120] 维度
                 # rx_batch = tf.expand_dims(tf.convert_to_tensor(batch, dtype=tf.complex64), 1) 
-                rx_batch = torch.from_numpy(batch).to(torch.complex64).unsqueeze(1).to(device)  # [batch_size,1,16,1120]
-                # 模拟接收机处理（例如FFT或NN推理）
-                # 这里简单地做一个FFT代替
-                # rx_out = torch.fft.fft(rx_batch, dim=-1)
-                y = demodulator(rx_batch)
+                # rx_batch = torch.from_numpy(batch).to(torch.complex64).unsqueeze(1).to(device)  # [batch_size,1,16,1120]
+                y = demodulator(batch)
                 h_hat, err_var = ls_est ([y, no])
                 x_hat, no_eff = lmmse_equ([y, h_hat, err_var, no])
                 llr = demapper([x_hat, no_eff])
-                b_hat = decoder(llr)
-                # torch.cuda.synchronize() if device == 'cuda' else None
+                # b_hat = decoder(llr)
+                # # torch.cuda.synchronize() if device == 'cuda' else None
+                # new = unpacker.push(b_hat)   # rx_bits.shape == [8*n,1,1,624]
+                # print(f"Number of New frames received: {new}")
+                if unpacker.is_complete():
+                    unpacker.recover_file("d:/sionna-main/practical/recv.png")
+                    print("File recovered!")
+                else:
+                    print("Missing frames:", unpacker.missing_frames())
 
+                current_size = data_queue.qsize()
+                remaining_capacity = max_queue - current_size
+                print(f"[INFO] Queue size: {current_size}, Remaining capacity: {remaining_capacity}")
                 processed += 1
                 elapsed = time.time() - t_start
-                throughput = batch_size * rx_ant * symbols_per_slot * 4 / (1024*1024*elapsed)
-                print(f"[INFO] processed {processed:4d} batches | throughput={throughput:.2f} MB/s")
-                # print(f"One batch process time: {elapsed:.2f} s")
-                if processed >= 1e5:
+                effective_throughput = batch_size * bits_per_slot / (1024*1024*8*elapsed)
+                raw_throughput = batch_size  * rg.num_ofdm_symbols * (rg.fft_size+rg.cyclic_prefix_length) * 32 \
+                                                                    / (1024*1024*8*elapsed)
+                print(f"[INFO] processed {processed:4d} batches | raw_throughput={raw_throughput:.2f} MB/s, effective_throughput={effective_throughput:.2f} MB/s")
+                print(f"One batch process time: {elapsed:.2f} s")
+                if processed >= 1e3:
                     break
         except queue.Empty:
             continue

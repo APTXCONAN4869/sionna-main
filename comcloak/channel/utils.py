@@ -201,7 +201,8 @@ def cir_to_ofdm_channel(frequencies, a, tau, normalize=False):
     h_f : [batch size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_time_steps, fft_size], torch.complex
         在``frequencies``下的信道频率响应
     """
-    tau = torch.tensor(tau)
+    if isinstance(tau, np.ndarray):
+        tau = torch.tensor(tau)
     real_dtype = tau.dtype
 
     if len(tau.shape) ==4:

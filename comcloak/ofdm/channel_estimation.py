@@ -353,7 +353,6 @@ class LSChannelEstimator(BaseChannelEstimator, nn.Module):
         # print("pilots:\n", self._pilot_pattern.pilots[self._pilot_pattern.pilots != 0 + 0j])
         # Compute error variance and broadcast to the same shape as h_ls
         # Expand rank of no for broadcasting
-
         no = expand_to_rank(no, h_ls.dim(), -1)
         # Expand rank of pilots for broadcasting
         pilots = expand_to_rank(self._pilot_pattern.pilots.to(y_pilots.device), h_ls.dim(), 0)
